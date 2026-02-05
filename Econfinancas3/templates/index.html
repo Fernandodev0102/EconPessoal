@@ -3,122 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerenciador de Gastos Pessoais</title>
+    <title>EconPessoal - Gerenciador</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <!-- Link to the CSS file served by Flask -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/econ.css') }}">
+
+    <style>
+        /* LAYOUT DASHBOARD */
+        .container {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
+
+        .right-column { display: flex; flex-direction: column; gap: 20px; }
+
+        /* CARDS DE RESUMO */
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .summary-item {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-align: center;
+            border-left: 5px solid #ccc;
+        }
+        .summary-item h3 { margin: 0 0 5px 0; font-size: 0.9em; color: #666; font-weight: normal; }
+        .summary-item .value { font-size: 1.4em; font-weight: bold; color: #333; }
+        
+        .card-total { border-left-color: #6c757d; }
+        .card-paid { border-left-color: #28a745; }
+        .card-credit { border-left-color: #dc3545; }
+
+        /* GRÁFICO */
+        .chart-section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .chart-container-wrapper { position: relative; height: 350px; width: 100%; }
+
+        /* BADGES E FILTROS */
+        .badge-pgto { padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+        .pgto-credito { background-color: #f8d7da; color: #721c24; }
+        .pgto-debito { background-color: #cce5ff; color: #004085; }
+        .pgto-pix { background-color: #d4edda; color: #155724; }
+        .pgto-dinheiro { background-color: #fff3cd; color: #856404; }
+        .pgto-outros { background-color: #e2e3e5; color: #383d41; }
+
+        .filter-section { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+        .filter-section select, .filter-section input { padding: 8px; border-radius: 5px; border: 1px solid #ddd; }
+
+    </style>
 </head>
 <body>
     <div id="feedback-message"></div>
 
-    <!-- New main wrapper for overall layout control -->
     <div class="main-wrapper">
-        <h1>Gerenciador de Gastos Pessoais</h1>
+        <h1 style="text-align: center; margin-bottom: 20px;">Gerenciador de Gastos Pessoais</h1>
 
         <div class="container">
-            <!-- Left Column: Expense Registration and Category Management -->
             <div class="left-column">
                 <section class="card">
                     <h2>Registrar Novo Gasto</h2>
                     <form id="expense-form">
                         <input type="hidden" id="expense-id">
                         <div class="form-group">
-                            <label for="expense-value">Valor (R$):</label>
-                            <input type="number" id="expense-value" placeholder="Ex: 50.25" step="0.01" required>
+                            <label>Descrição:</label>
+                            <input type="text" id="expense-description" placeholder="Ex: Mercado" required>
                         </div>
                         <div class="form-group">
-                            <label for="expense-date">Data:</label>
+                            <label>Valor (R$):</label>
+                            <input type="number" id="expense-value" placeholder="0.00" step="0.01" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Data:</label>
                             <input type="date" id="expense-date" required>
                         </div>
                         <div class="form-group">
-                            <label for="expense-category">Categoria:</label>
-                            <select id="expense-category" required>
-                                <!-- Categories will be loaded via JS -->
-                            </select>
+                            <label>Categoria:</label>
+                            <select id="expense-category" required></select>
                         </div>
                         <div class="form-group">
-                            <label for="expense-description">Descrição:</label>
-                            <textarea id="expense-description" placeholder="Ex: Almoço no restaurante X"></textarea>
+                            <label>Forma de Pagamento:</label>
+                            <select id="expense-payment" required>
+                                <option value="Pix">Pix</option>
+                                <option value="Débito">Débito</option>
+                                <option value="Crédito">Crédito</option>
+                                <option value="Dinheiro">Dinheiro</option>
+                                <option value="Outros">Outros</option>
+                            </select>
                         </div>
-                        <button type="submit" id="save-expense-btn">Salvar Gasto</button>
+                        <button type="submit" id="save-expense-btn" style="width: 100%; margin-top: 10px;">Salvar Gasto</button>
                     </form>
                 </section>
 
                 <section class="card category-management">
-                    <h2>Gerenciar Categorias</h2>
+                    <h3>Nova Categoria</h3>
                     <div class="form-group">
-                        <label for="new-category-name">Nova Categoria:</label>
                         <input type="text" id="new-category-name" placeholder="Nome da categoria">
                     </div>
-                    <div class="btn-group">
-                        <button id="add-category-btn">Adicionar Categoria</button>
-                    </div>
-
-                    <h3>Minhas Categorias</h3>
-                    <ul id="category-list" class="category-list">
-                        <!-- Categories will be loaded via JS -->
-                    </ul>
+                    <button id="add-category-btn" style="width: 100%;">+ Adicionar</button>
+                    
+                    <h3 style="margin-top: 20px;">Categorias</h3>
+                    <ul id="category-list" class="category-list"></ul>
                 </section>
             </div>
 
-            <!-- Right Column: Expense Listing and Summary Chart -->
             <div class="right-column">
-                <section class="card expense-list-section">
-                    <h2>Meus Gastos</h2>
-
-                    <div class="filter-section">
-                        <div class="form-group">
-                            <label for="filter-category">Filtrar por Categoria:</label>
-                            <select id="filter-category">
-                                <option value="">Todas</option>
-                                <!-- Categories will be loaded via JS -->
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="filter-date">Filtrar por Data:</label>
-                            <input type="date" id="filter-date">
-                        </div>
-                        <button id="clear-filters-btn">Limpar Filtros</button>
+                <div class="summary-cards">
+                    <div class="summary-item card-total">
+                        <h3>Total Gasto</h3>
+                        <div class="value" id="total-general">R$ 0,00</div>
                     </div>
+                    <div class="summary-item card-paid">
+                        <h3>Já Pago</h3>
+                        <div class="value" id="total-paid" style="color: #28a745;">R$ 0,00</div>
+                    </div>
+                    <div class="summary-item card-credit">
+                        <h3>Fatura (A Pagar)</h3>
+                        <div class="value" id="total-credit" style="color: #dc3545;">R$ 0,00</div>
+                    </div>
+                </div>
 
-                    <div style="max-height: 400px; overflow-y: auto;">
-                        <table class="expense-table">
-                            <thead>
-                                <tr>
-                                    <th>Valor</th>
-                                    <th>Data</th>
-                                    <th>Categoria</th>
-                                    <th>Descrição</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody id="expense-table-body">
-                                <!-- Expenses will be loaded via JS -->
-                            </tbody>
-                        </table>
+                <section class="card chart-section">
+                    <div class="chart-container-wrapper">
+                        <canvas id="expensesChart"></canvas>
                     </div>
                 </section>
 
-                <section class="card chart-section">
-                    <h2>Resumo dos Gastos</h2>
-                    <div class="chart-summary">
-                        <h3>Total Geral:</h3>
-                        <p id="total-expenses">R$ 0,00</p>
+                <section class="card expense-list-section">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <h2 style="margin: 0;">Histórico</h2>
+                        <button id="clear-filters-btn" style="padding: 5px 10px; font-size: 0.8em;">Limpar Filtros</button>
                     </div>
-                    <div id="chart-bars" class="chart-bars">
-                        <!-- Chart bars will be loaded via JS -->
+
+                    <div class="filter-section">
+                        <select id="filter-category" style="flex: 1; min-width: 120px;"><option value="">Categoria: Todas</option></select>
+                        <select id="filter-payment" style="flex: 1; min-width: 120px;">
+                            <option value="">Pgto: Todos</option>
+                            <option value="Crédito">Crédito</option>
+                            <option value="Débito">Débito</option>
+                            <option value="Pix">Pix</option>
+                            <option value="Dinheiro">Dinheiro</option>
+                            <option value="Outros">Outros</option>
+                        </select>
+                        <input type="date" id="filter-date" style="flex: 1; min-width: 120px;">
                     </div>
-                    <div id="chart-legend" class="chart-legend">
-                        <!-- Chart legend will be loaded via JS -->
+
+                    <div style="max-height: 400px; overflow-y: auto; border-top: 1px solid #eee;">
+                        <table class="expense-table">
+                            <thead>
+                                <tr>
+                                    <th>Data</th>
+                                    <th>Descrição</th>
+                                    <th>Categoria</th>
+                                    <th>Pagamento</th>
+                                    <th>Valor</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expense-table-body"></tbody>
+                        </table>
                     </div>
                 </section>
             </div>
         </div>
-        <!-- Moved reset button inside the main-wrapper -->
-        <button id="reset-data-btn" class="reset-data-button">Zerar Todos os Dados</button>
+
+        <button id="reset-data-btn" class="reset-data-button" style="margin: 30px auto; display: block;">Zerar Todos os Dados</button>
     </div>
 
-    <!-- Confirmation Modal -->
     <div id="confirmation-modal" class="modal">
         <div class="modal-content">
             <h3 id="modal-title">Confirmação</h3>
@@ -130,7 +194,6 @@
         </div>
     </div>
 
-    <!-- Link to the JavaScript file served by Flask -->
     <script src="{{ url_for('static', filename='js/econfinancas2.js') }}"></script>
 </body>
 </html>
