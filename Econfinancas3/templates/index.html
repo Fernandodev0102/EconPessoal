@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/econ.css') }}">
 
     <style>
-        /* LAYOUT DASHBOARD */
+        /* LAYOUT GERAL */
         .container {
             display: grid;
             grid-template-columns: 320px 1fr;
@@ -17,12 +17,10 @@
             max-width: 1400px;
             margin: 0 auto;
         }
-
         @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
-
         .right-column { display: flex; flex-direction: column; gap: 20px; }
 
-        /* CARDS DE RESUMO */
+        /* CARDS RESUMO */
         .summary-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -45,15 +43,10 @@
         .card-credit { border-left-color: #dc3545; }
 
         /* GRÁFICO */
-        .chart-section {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
+        .chart-section { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .chart-container-wrapper { position: relative; height: 350px; width: 100%; }
 
-        /* BADGES E FILTROS */
+        /* BADGES E STATUS */
         .badge-pgto { padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
         .pgto-credito { background-color: #f8d7da; color: #721c24; }
         .pgto-debito { background-color: #cce5ff; color: #004085; }
@@ -61,9 +54,15 @@
         .pgto-dinheiro { background-color: #fff3cd; color: #856404; }
         .pgto-outros { background-color: #e2e3e5; color: #383d41; }
 
+        .status-btn { border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: bold; transition: 0.2s; }
+        .btn-pay-now { background-color: #ffc107; color: #212529; border: 1px solid #ffc107; }
+        .btn-pay-now:hover { background-color: #e0a800; }
+        
+        .status-paid-badge { color: #28a745; font-weight: bold; display: flex; align-items: center; gap: 5px; }
+
+        /* FILTROS */
         .filter-section { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
         .filter-section select, .filter-section input { padding: 8px; border-radius: 5px; border: 1px solid #ddd; }
-
     </style>
 </head>
 <body>
@@ -78,6 +77,7 @@
                     <h2>Registrar Novo Gasto</h2>
                     <form id="expense-form">
                         <input type="hidden" id="expense-id">
+                        
                         <div class="form-group">
                             <label>Descrição:</label>
                             <input type="text" id="expense-description" placeholder="Ex: Mercado" required>
@@ -94,6 +94,7 @@
                             <label>Categoria:</label>
                             <select id="expense-category" required></select>
                         </div>
+                        
                         <div class="form-group">
                             <label>Forma de Pagamento:</label>
                             <select id="expense-payment" required>
@@ -104,6 +105,25 @@
                                 <option value="Outros">Outros</option>
                             </select>
                         </div>
+
+                        <div class="form-group" id="installments-group" style="display: none;">
+                            <label>Parcelas:</label>
+                            <select id="expense-installments">
+                                <option value="1">1x (À vista)</option>
+                                <option value="2">2x</option>
+                                <option value="3">3x</option>
+                                <option value="4">4x</option>
+                                <option value="5">5x</option>
+                                <option value="6">6x</option>
+                                <option value="7">7x</option>
+                                <option value="8">8x</option>
+                                <option value="9">9x</option>
+                                <option value="10">10x</option>
+                                <option value="11">11x</option>
+                                <option value="12">12x</option>
+                            </select>
+                        </div>
+
                         <button type="submit" id="save-expense-btn" style="width: 100%; margin-top: 10px;">Salvar Gasto</button>
                     </form>
                 </section>
@@ -147,7 +167,7 @@
                         <h2 style="margin: 0;">Histórico</h2>
                         <button id="clear-filters-btn" style="padding: 5px 10px; font-size: 0.8em;">Limpar Filtros</button>
                     </div>
-
+                    
                     <div class="filter-section">
                         <select id="filter-category" style="flex: 1; min-width: 120px;"><option value="">Categoria: Todas</option></select>
                         <select id="filter-payment" style="flex: 1; min-width: 120px;">
@@ -170,6 +190,7 @@
                                     <th>Categoria</th>
                                     <th>Pagamento</th>
                                     <th>Valor</th>
+                                    <th>Status</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>

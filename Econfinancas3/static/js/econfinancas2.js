@@ -1,10 +1,9 @@
-// --- Variáveis Globais ---
-let expenses = []; 
-let categories = []; 
+// --- VARIÁVEIS E DOM ---
+let expenses = [], categories = []; 
 const DEFAULT_CATEGORY_NAME = 'Outros';
 let myChart = null; 
 
-// --- Elementos do DOM ---
+// Formulário
 const expenseForm = document.getElementById('expense-form');
 const expenseIdInput = document.getElementById('expense-id');
 const expenseValueInput = document.getElementById('expense-value');
@@ -13,6 +12,12 @@ const expenseCategorySelect = document.getElementById('expense-category');
 const expensePaymentSelect = document.getElementById('expense-payment');
 const expenseDescriptionInput = document.getElementById('expense-description');
 const saveExpenseBtn = document.getElementById('save-expense-btn');
+
+// Campo de Parcelas (Novo)
+const installmentsGroup = document.getElementById('installments-group');
+const expenseInstallmentsSelect = document.getElementById('expense-installments');
+
+// Tabela e Feedback
 const expenseTableBody = document.getElementById('expense-table-body');
 const feedbackMessage = document.getElementById('feedback-message');
 
@@ -20,15 +25,14 @@ const feedbackMessage = document.getElementById('feedback-message');
 const displayTotalGeneral = document.getElementById('total-general');
 const displayTotalPaid = document.getElementById('total-paid');
 const displayTotalCredit = document.getElementById('total-credit');
-
 const ctx = document.getElementById('expensesChart').getContext('2d');
 
-// Elementos de Categoria e Filtros
+// Gerenciamento e Filtros
 const newCategoryNameInput = document.getElementById('new-category-name');
 const addCategoryBtn = document.getElementById('add-category-btn');
 const categoryListUl = document.getElementById('category-list');
 const filterCategorySelect = document.getElementById('filter-category');
-const filterPaymentSelect = document.getElementById('filter-payment'); // NOVO ELEMENTO
+const filterPaymentSelect = document.getElementById('filter-payment');
 const filterDateInput = document.getElementById('filter-date');
 const clearFiltersBtn = document.getElementById('clear-filters-btn');
 const resetDataBtn = document.getElementById('reset-data-btn');
@@ -41,332 +45,194 @@ const modalConfirmBtn = document.getElementById('modal-confirm-btn');
 const modalCancelBtn = document.getElementById('modal-cancel-btn');
 let currentConfirmAction = null;
 
-// --- Funções Utilitárias ---
-
-function formatCurrency(value) {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+// --- UTILITÁRIOS ---
+function formatCurrency(v) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v); }
+function formatDate(d) { if(!d) return '-'; const [y,m,day] = d.split('-'); return `${day}/${m}/${y}`; }
+function showFeedback(msg, type='info') {
+    feedbackMessage.textContent = msg; feedbackMessage.className = `show ${type}`;
+    feedbackMessage.style.backgroundColor = type==='success'?'#28a745':(type==='error'?'#dc3545':'#17a2b8');
+    setTimeout(()=>feedbackMessage.className='', 3000);
 }
-
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const [year, month, day] = dateString.split('-');
-    return `${day}/${month}/${year}`;
+function generateDistinctColor(existing) {
+    const letters='0123456789ABCDEF'; let c; let i=0;
+    do { c='#'; for(let k=0;k<6;k++) c+=letters[Math.floor(Math.random()*16)]; i++; } while(existing.includes(c)&&i<100);
+    return c;
 }
-
-function showFeedback(message, type = 'info') {
-    feedbackMessage.textContent = message;
-    feedbackMessage.className = `show ${type}`;
-    if (type === 'success') feedbackMessage.style.backgroundColor = '#28a745';
-    else if (type === 'error') feedbackMessage.style.backgroundColor = '#dc3545';
-    else feedbackMessage.style.backgroundColor = '#17a2b8';
-    setTimeout(() => { feedbackMessage.className = ''; }, 3000);
-}
-
-function generateDistinctColor(existingColors) {
-    const letters = '0123456789ABCDEF';
-    let newColor;
-    let attempts = 0;
-    do {
-        newColor = '#';
-        for (let i = 0; i < 6; i++) { newColor += letters[Math.floor(Math.random() * 16)]; }
-        attempts++;
-    } while (existingColors.includes(newColor) && attempts < 100);
-    return newColor;
-}
-
-function getPaymentClass(method) {
-    const m = (method || '').toLowerCase();
-    if (m === 'crédito') return 'pgto-credito';
-    if (m === 'débito') return 'pgto-debito';
-    if (m === 'pix') return 'pgto-pix';
-    if (m === 'dinheiro') return 'pgto-dinheiro';
-    return 'pgto-outros';
+function getPaymentClass(m) {
+    const v=(m||'').toLowerCase(); 
+    if(v==='crédito') return 'pgto-credito'; if(v==='débito') return 'pgto-debito';
+    if(v==='pix') return 'pgto-pix'; if(v==='dinheiro') return 'pgto-dinheiro'; return 'pgto-outros';
 }
 
 // --- API ---
+async function fetchCategories() { try{ return await(await fetch('/api/categories')).json(); }catch(e){return[];} }
+async function fetchExpenses(c='', d='') { try{ const p=new URLSearchParams(); if(c)p.append('category',c); if(d)p.append('date',d); return await(await fetch(`/api/expenses?${p}`)).json(); }catch(e){return[];} }
 
-async function fetchCategories() {
-    try {
-        const response = await fetch('/api/categories');
-        if (!response.ok) throw new Error('Erro na API');
-        return await response.json();
-    } catch (error) { return []; }
-}
-
-async function fetchExpenses(category = '', date = '') {
-    try {
-        const params = new URLSearchParams();
-        if (category) params.append('category', category);
-        if (date) params.append('date', date);
-        const response = await fetch(`/api/expenses?${params.toString()}`);
-        if (!response.ok) throw new Error('Erro na API');
-        return await response.json();
-    } catch (error) { return []; }
-}
-
-// --- Lógica Principal (COM FILTRO NOVO) ---
-
+// --- LÓGICA PRINCIPAL ---
 async function loadAllData() {
-    const currentFilterCat = filterCategorySelect.value;
-    const currentFilterPay = filterPaymentSelect.value;
-    
-    categories = await fetchCategories();
-    renderCategories();
-    
-    // Restaura filtros
-    filterCategorySelect.value = currentFilterCat;
-    filterPaymentSelect.value = currentFilterPay;
-    
+    const cCat = filterCategorySelect.value, cPay = filterPaymentSelect.value;
+    categories = await fetchCategories(); renderCategories();
+    filterCategorySelect.value=cCat; filterPaymentSelect.value=cPay;
     await updateDashboardOnly();
 }
 
 async function updateDashboardOnly() {
-    const catFilter = filterCategorySelect.value;
-    const dateFilter = filterDateInput.value;
-    const payFilter = filterPaymentSelect.value; // Captura filtro de pagamento
-
-    // Busca dados no servidor (filtrando por Categoria e Data)
-    let fetchedExpenses = await fetchExpenses(catFilter, dateFilter);
-
-    // Filtra localmente por Pagamento (se houver seleção)
-    if (payFilter) {
-        fetchedExpenses = fetchedExpenses.filter(exp => exp.payment_method === payFilter);
-    }
-
-    expenses = fetchedExpenses;
-    
-    updateTotalsAndChart();
-    renderExpensesTable();
+    const catF=filterCategorySelect.value, dateF=filterDateInput.value, payF=filterPaymentSelect.value;
+    let data = await fetchExpenses(catF, dateF);
+    if(payF) data = data.filter(e => e.payment_method === payF);
+    expenses = data;
+    updateTotalsAndChart(); renderExpensesTable();
 }
 
-// --- Totais e Gráfico ---
-
+// --- CÁLCULOS E GRÁFICOS ---
 function updateTotalsAndChart() {
-    let totalGeneral = 0;
-    let totalPaid = 0;
-    let totalCredit = 0;
-    const categoryTotals = {};
+    let tGen=0, tPaid=0, tPendingCredit=0;
+    const catTotals = {};
 
-    expenses.forEach(expense => {
-        const val = expense.value;
-        const method = expense.payment_method;
-
-        totalGeneral += val;
-        if (method === 'Crédito') totalCredit += val;
-        else totalPaid += val;
-
-        if (!categoryTotals[expense.category]) categoryTotals[expense.category] = 0;
-        categoryTotals[expense.category] += val;
+    expenses.forEach(e => {
+        const val = e.value;
+        tGen += val;
+        if (e.paid) tPaid += val; else tPendingCredit += val;
+        if(!catTotals[e.category]) catTotals[e.category]=0; catTotals[e.category]+=val;
     });
 
-    displayTotalGeneral.textContent = formatCurrency(totalGeneral);
-    displayTotalPaid.textContent = formatCurrency(totalPaid);
-    displayTotalCredit.textContent = formatCurrency(totalCredit);
+    displayTotalGeneral.textContent = formatCurrency(tGen);
+    displayTotalPaid.textContent = formatCurrency(tPaid);
+    displayTotalCredit.textContent = formatCurrency(tPendingCredit);
 
-    const labels = Object.keys(categoryTotals);
-    const data = Object.values(categoryTotals);
-    const backgroundColors = [];
-    labels.forEach(() => backgroundColors.push(generateDistinctColor(backgroundColors)));
-
-    if (myChart) myChart.destroy();
-
-    if (totalGeneral > 0 || labels.length > 0) {
+    const labels = Object.keys(catTotals), data = Object.values(catTotals), bg = [];
+    labels.forEach(() => bg.push(generateDistinctColor(bg)));
+    if(myChart) myChart.destroy();
+    if(tGen>0 || labels.length>0) {
         myChart = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Gasto',
-                    data: data,
-                    backgroundColor: backgroundColors,
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    barPercentage: 0.6
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => formatCurrency(c.raw) } } },
-                scales: { x: { ticks: { callback: (v) => 'R$ ' + v } } }
-            }
+            type: 'bar', data: { labels, datasets: [{ label:'Gasto', data, backgroundColor:bg, borderWidth:1, borderRadius:4, barPercentage:0.6 }] },
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>formatCurrency(c.raw)}} }, scales:{x:{ticks:{callback:v=>'R$ '+v}}} }
         });
     }
 }
 
-// --- Renderização da Tabela (COR AJUSTADA) ---
-
+// --- TABELA ---
 function renderExpensesTable() {
     expenseTableBody.innerHTML = '';
-    
-    if (expenses.length === 0) {
-        expenseTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px;">Nenhum gasto encontrado.</td></tr>';
-        return;
-    }
+    if(expenses.length===0) { expenseTableBody.innerHTML='<tr><td colspan="7" style="text-align:center; padding:20px;">Nada aqui.</td></tr>'; return; }
 
-    expenses.forEach(expense => {
+    expenses.forEach(e => {
         const row = expenseTableBody.insertRow();
-        const method = expense.payment_method || 'Outros';
+        const method = e.payment_method || 'Outros';
         const cssClass = getPaymentClass(method);
         
+        let statusHtml = '';
+        if (e.paid) {
+            statusHtml = '<span class="status-paid-badge">✔ Pago</span>';
+        } else {
+            statusHtml = `<button class="status-btn btn-pay-now" onclick="togglePaid('${e.id}')">Pagar Fatura</button>`;
+        }
+
         row.innerHTML = `
-            <td>${formatDate(expense.date)}</td>
-            <td>${expense.description || '-'}</td>
-            <td>${expense.category}</td>
+            <td>${formatDate(e.date)}</td>
+            <td>${e.description || '-'}</td>
+            <td>${e.category}</td>
             <td><span class="badge-pgto ${cssClass}">${method}</span></td>
-            <td style="color: #e74c3c; font-weight: 800; font-size: 1.1em;">${formatCurrency(expense.value)}</td>
+            <td style="color: #e74c3c; font-weight: 800; font-size: 1.1em;">${formatCurrency(e.value)}</td>
+            <td>${statusHtml}</td>
             <td>
-                <button class="btn-edit" onclick="editExpense('${expense.id}')">✏️</button>
-                <button class="btn-delete" onclick="deleteExpense('${expense.id}')">🗑️</button>
+                <button class="btn-edit" onclick="editExpense('${e.id}')">✏️</button>
+                <button class="btn-delete" onclick="deleteExpense('${e.id}')">🗑️</button>
             </td>
         `;
     });
 }
 
-// --- Ações ---
+// --- EVENTO DO SELETOR DE PAGAMENTO (MOSTRAR PARCELAS) ---
+expensePaymentSelect.addEventListener('change', () => {
+    if (expensePaymentSelect.value === 'Crédito') {
+        installmentsGroup.style.display = 'block';
+    } else {
+        installmentsGroup.style.display = 'none';
+        expenseInstallmentsSelect.value = '1';
+    }
+});
 
-async function addOrUpdateExpense(event) {
-    event.preventDefault();
-    const id = expenseIdInput.value;
-    const value = parseFloat(expenseValueInput.value);
-    const date = expenseDateInput.value;
-    const categoryName = expenseCategorySelect.value;
-    const paymentMethod = expensePaymentSelect.value;
-    const description = expenseDescriptionInput.value.trim();
-
-    if (isNaN(value) || value <= 0) return showFeedback('Valor inválido.', 'error');
-    if (!date || !categoryName || !paymentMethod) return showFeedback('Preencha campos.', 'error');
-
-    const expenseData = { value, date, category: categoryName, payment_method: paymentMethod, description };
-    const url = id ? `/api/expenses/${id}` : '/api/expenses';
-    const method = id ? 'PUT' : 'POST';
-
+// --- AÇÕES CRUD ---
+async function togglePaid(id) {
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(expenseData)
-        });
-        if (response.ok) {
-            showFeedback('Salvo!', 'success');
-            expenseForm.reset();
-            expenseIdInput.value = '';
-            saveExpenseBtn.textContent = 'Salvar Gasto';
-            expenseDateInput.value = new Date().toISOString().split('T')[0];
+        const res = await fetch(`/api/expenses/${id}/toggle_paid`, { method: 'PATCH' });
+        if(res.ok) { showFeedback('Status atualizado!', 'success'); await updateDashboardOnly(); } 
+        else showFeedback('Erro ao atualizar.', 'error');
+    } catch(e) { showFeedback('Erro de conexão.', 'error'); }
+}
+
+async function addOrUpdateExpense(ev) {
+    ev.preventDefault();
+    const id=expenseIdInput.value, val=parseFloat(expenseValueInput.value), dt=expenseDateInput.value, cat=expenseCategorySelect.value, pay=expensePaymentSelect.value, desc=expenseDescriptionInput.value.trim();
+    // Captura Parcelas
+    const installments = parseInt(expenseInstallmentsSelect.value);
+
+    if(isNaN(val)||val<=0) return showFeedback('Valor inválido','error');
+    if(!dt||!cat||!pay) return showFeedback('Preencha tudo','error');
+
+    const data={
+        value:val, date:dt, category:cat, payment_method:pay, description:desc,
+        installments: installments // Envia parcelas
+    };
+    
+    const url=id?`/api/expenses/${id}`:'/api/expenses', method=id?'PUT':'POST';
+    
+    try{
+        if((await fetch(url,{method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)})).ok) {
+            showFeedback('Salvo!','success'); 
+            expenseForm.reset(); 
+            expenseIdInput.value=''; 
+            saveExpenseBtn.textContent='Salvar Gasto'; 
+            expenseDateInput.value=new Date().toISOString().split('T')[0];
+            // Reseta visual das parcelas
+            installmentsGroup.style.display = 'none';
+            expenseInstallmentsSelect.value = '1';
+
             await updateDashboardOnly();
         } else throw new Error();
-    } catch (e) { showFeedback('Erro ao salvar.', 'error'); }
+    }catch(e){showFeedback('Erro','error');}
 }
 
 function editExpense(id) {
-    const expense = expenses.find(exp => exp.id === id);
-    if (expense) {
-        expenseIdInput.value = expense.id;
-        expenseValueInput.value = expense.value;
-        expenseDateInput.value = expense.date;
-        expenseCategorySelect.value = expense.category;
-        expensePaymentSelect.value = expense.payment_method || 'Outros';
-        expenseDescriptionInput.value = expense.description;
-        saveExpenseBtn.textContent = 'Atualizar Gasto';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+    const e=expenses.find(x=>x.id===id);
+    if(e){ 
+        expenseIdInput.value=e.id; 
+        expenseValueInput.value=e.value; 
+        expenseDateInput.value=e.date; 
+        expenseCategorySelect.value=e.category; 
+        expensePaymentSelect.value=e.payment_method||'Outros'; 
+        expenseDescriptionInput.value=e.description;
+        
+        // Ao editar, esconde parcelamento para não "re-explodir" o gasto
+        installmentsGroup.style.display = 'none';
+        expenseInstallmentsSelect.value = '1';
+        
+        saveExpenseBtn.textContent='Atualizar Gasto'; 
+        window.scrollTo({top:0, behavior:'smooth'}); 
     }
 }
 
-function deleteExpense(id) {
-    showConfirmationModal('Excluir', 'Apagar?', async () => {
-        await fetch(`/api/expenses/${id}`, { method: 'DELETE' });
-        await updateDashboardOnly();
-        hideConfirmationModal();
-    });
-}
+function deleteExpense(id) { showConfirmationModal('Excluir', 'Apagar?', async()=>{ await fetch(`/api/expenses/${id}`,{method:'DELETE'}); await updateDashboardOnly(); hideConfirmationModal(); }); }
+async function addCategory(){ const n=newCategoryNameInput.value.trim(); if(!n)return showFeedback('Nome inválido','error'); if((await fetch('/api/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})})).ok){ newCategoryNameInput.value=''; await loadAllData(); showFeedback('Criado!','success'); }else showFeedback('Erro','info'); }
+function deleteCategory(id,n){ showConfirmationModal('Excluir',`Apagar "${n}"?`,async()=>{await fetch(`/api/categories/${id}`,{method:'DELETE'}); await loadAllData(); hideConfirmationModal();}); }
 
-// --- Categorias ---
-
-async function addCategory() {
-    const name = newCategoryNameInput.value.trim();
-    if (!name) return showFeedback('Nome inválido.', 'error');
-    const response = await fetch('/api/categories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-    });
-    if (response.ok) {
-        newCategoryNameInput.value = '';
-        await loadAllData();
-        showFeedback('Criado!', 'success');
-    } else showFeedback('Erro/Existe.', 'info');
-}
-
-function renderCategories() {
-    categoryListUl.innerHTML = '';
-    const saved = expenseCategorySelect.value;
-    expenseCategorySelect.innerHTML = '';
-    filterCategorySelect.innerHTML = '<option value="">Categoria: Todas</option>';
-
-    categories.forEach(cat => {
-        const opt1 = document.createElement('option'); opt1.value = cat.name; opt1.textContent = cat.name;
-        expenseCategorySelect.appendChild(opt1);
-        
-        const opt2 = document.createElement('option'); opt2.value = cat.name; opt2.textContent = cat.name;
-        filterCategorySelect.appendChild(opt2);
-
-        const li = document.createElement('li');
-        li.innerHTML = `<span>${cat.name}</span>`;
-        if (cat.name !== DEFAULT_CATEGORY_NAME) {
-            const btn = document.createElement('button');
-            btn.className = 'btn-delete';
-            btn.textContent = 'Excluir';
-            btn.onclick = () => deleteCategory(cat.id, cat.name);
-            li.appendChild(btn);
-        }
+// --- CONFIG INICIAL ---
+function renderCategories(){
+    categoryListUl.innerHTML=''; const saved=expenseCategorySelect.value; expenseCategorySelect.innerHTML=''; filterCategorySelect.innerHTML='<option value="">Categoria: Todas</option>';
+    categories.forEach(c=>{
+        const o1=document.createElement('option'); o1.value=c.name; o1.textContent=c.name; expenseCategorySelect.appendChild(o1);
+        const o2=document.createElement('option'); o2.value=c.name; o2.textContent=c.name; filterCategorySelect.appendChild(o2);
+        const li=document.createElement('li'); li.innerHTML=`<span>${c.name}</span>`;
+        if(c.name!==DEFAULT_CATEGORY_NAME){ const b=document.createElement('button'); b.className='btn-delete'; b.textContent='Excluir'; b.onclick=()=>deleteCategory(c.id,c.name); li.appendChild(b); }
         categoryListUl.appendChild(li);
     });
-    if (saved) expenseCategorySelect.value = saved;
+    if(saved)expenseCategorySelect.value=saved;
 }
-
-function deleteCategory(id, name) {
-    showConfirmationModal('Excluir', `Apagar "${name}"?`, async () => {
-        await fetch(`/api/categories/${id}`, { method: 'DELETE' });
-        await loadAllData();
-        hideConfirmationModal();
-    });
-}
-
-// --- Inicialização ---
-
-expenseForm.addEventListener('submit', addOrUpdateExpense);
-addCategoryBtn.addEventListener('click', addCategory);
-
-// Listeners dos 3 filtros
-filterCategorySelect.addEventListener('change', updateDashboardOnly);
-filterPaymentSelect.addEventListener('change', updateDashboardOnly); // NOVO LISTENER
-filterDateInput.addEventListener('change', updateDashboardOnly);
-
-clearFiltersBtn.addEventListener('click', async () => {
-    filterCategorySelect.value = '';
-    filterPaymentSelect.value = '';
-    filterDateInput.value = '';
-    await updateDashboardOnly();
-});
-
-resetDataBtn.addEventListener('click', () => {
-    showConfirmationModal('Zerar Tudo', 'Apagar TUDO?', async () => {
-        await fetch('/api/reset_data', { method: 'DELETE' });
-        await loadAllData();
-        hideConfirmationModal();
-    });
-});
-function showConfirmationModal(title, msg, action) {
-    modalTitle.textContent = title;
-    modalMessage.textContent = msg;
-    currentConfirmAction = action;
-    confirmationModal.classList.add('show');
-}
-modalConfirmBtn.addEventListener('click', () => { if (currentConfirmAction) currentConfirmAction(); });
-modalCancelBtn.addEventListener('click', () => confirmationModal.classList.remove('show'));
-
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadAllData();
-    expenseDateInput.value = new Date().toISOString().split('T')[0];
-});
+function showConfirmationModal(t,m,a){ modalTitle.textContent=t; modalMessage.textContent=m; currentConfirmAction=a; confirmationModal.classList.add('show'); }
+expenseForm.addEventListener('submit',addOrUpdateExpense); addCategoryBtn.addEventListener('click',addCategory);
+filterCategorySelect.addEventListener('change',updateDashboardOnly); filterPaymentSelect.addEventListener('change',updateDashboardOnly); filterDateInput.addEventListener('change',updateDashboardOnly);
+clearFiltersBtn.addEventListener('click',async()=>{filterCategorySelect.value='';filterPaymentSelect.value='';filterDateInput.value='';await updateDashboardOnly();});
+resetDataBtn.addEventListener('click',()=>{showConfirmationModal('Zerar','Tudo?',async()=>{await fetch('/api/reset_data',{method:'DELETE'});await loadAllData();hideConfirmationModal();});});
+modalConfirmBtn.addEventListener('click',()=>{if(currentConfirmAction)currentConfirmAction();}); modalCancelBtn.addEventListener('click',()=>confirmationModal.classList.remove('show'));
+document.addEventListener('DOMContentLoaded',async()=>{await loadAllData();expenseDateInput.value=new Date().toISOString().split('T')[0];});
