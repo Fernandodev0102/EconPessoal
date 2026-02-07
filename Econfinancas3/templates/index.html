@@ -10,7 +10,7 @@
 
     <style>
         /* ==========================================================================
-           1. CONFIGURAÇÕES GERAIS E CORES (TEMA ESCURO)
+           1. CONFIGURAÇÕES GERAIS E CORES (TEMA ESCURO - INTACTO)
            ========================================================================== */
         :root {
             --bg-body: #121212;
@@ -27,40 +27,80 @@
             --cycle-30-text: #ffb74d;
         }
 
-        body { background-color: var(--bg-body); color: var(--text-primary); font-family: 'Inter', sans-serif; }
-        h1, h2, h3 { color: var(--text-primary); }
+        /* RESET GERAL para remover bordas brancas do navegador */
+        body { 
+            background-color: var(--bg-body); 
+            color: var(--text-primary); 
+            font-family: 'Inter', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            overflow-x: hidden; /* Evita rolagem lateral desnecessária */
+        }
+
+        /* TÍTULO COMPACTO */
+        h1 { 
+            color: var(--text-primary); 
+            text-align: center; 
+            font-size: 1.4rem; /* Bem menor */
+            margin: 10px 0 15px 0; /* Margens reduzidas para ganhar espaço vertical */
+            font-weight: 600;
+        }
+
+        h2, h3 { color: var(--text-primary); margin-top: 0; }
         label { color: var(--text-secondary); }
 
-        .container { display: grid; grid-template-columns: 320px 1fr; gap: 20px; max-width: 1400px; margin: 0 auto; }
-        @media (max-width: 900px) { .container { grid-template-columns: 1fr; } }
-        .right-column { display: flex; flex-direction: column; gap: 20px; }
-        .card { background: var(--bg-card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #333; }
+        /* ==========================================================================
+           2. LAYOUT TELA CHEIA (FULL WIDTH)
+           ========================================================================== */
+        .container { 
+            display: grid; 
+            grid-template-columns: 300px 1fr; /* Lateral fixa um pouco mais estreita, resto flexível */
+            gap: 15px; /* Gap reduzido */
+            
+            width: 100%;       /* Ocupa 100% da largura */
+            max-width: none;   /* Remove qualquer limite de tamanho */
+            
+            margin: 0; 
+            padding: 10px;     /* Bordas bem próximas da extremidade (como solicitado) */
+            box-sizing: border-box; 
+        }
+
+        @media (max-width: 900px) { 
+            .container { 
+                grid-template-columns: 1fr; 
+                padding: 10px;
+            } 
+        }
+
+        .right-column { display: flex; flex-direction: column; gap: 15px; } /* Gap vertical reduzido */
+        .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #333; }
 
         /* INPUTS */
-        .form-group { margin-bottom: 15px; }
-        .form-group label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9em; }
+        .form-group { margin-bottom: 12px; } /* Espaçamento reduzido entre inputs */
+        .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85em; }
         .form-group input, .form-group select, .filter-section select, .filter-section input {
-            width: 100%; padding: 10px; background-color: var(--input-bg); border: 1px solid var(--input-border); color: white; border-radius: 5px; box-sizing: border-box;
+            width: 100%; padding: 8px; /* Padding interno menor */
+            background-color: var(--input-bg); border: 1px solid var(--input-border); color: white; border-radius: 5px; box-sizing: border-box; font-size: 0.95em;
         }
         .filter-section select, .filter-section input { width: auto; flex: 1; }
 
         /* PAINEL DE CICLOS */
-        .cycles-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .cycles-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .cycle-card { background: var(--bg-card); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #333; }
-        .cycle-header { padding: 12px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
-        .header-15 { background-color:black; color:white; border-bottom: 2px solid var(--cycle-15-text); }
-        .header-30 { background-color:black; color:white; border-bottom: 2px solid var(--cycle-30-text); }
+        .cycle-header { padding: 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; font-size: 0.95em; }
+        .header-15 { background-color:black; color:white; border-bottom: 2px solid white; }
+        .header-30 { background-color:black; color:white; border-bottom: 2px solid white; }
         
-        .income-input-group { display: flex; align-items: center; gap: 8px; }
+        .income-input-group { display: flex; align-items: center; gap: 5px; }
         .income-input {
-            width: 110px !important; padding: 6px 10px !important; background-color: #2d2d2d !important; border: 1px solid #444 !important; border-radius: 6px !important; color: #00e676 !important; font-weight: 700; text-align: right; font-size: 1rem; outline: none; transition: all 0.3s ease;
+            width: 100px !important; padding: 4px 8px !important; background-color: #2d2d2d !important; border: 1px solid #444 !important; border-radius: 6px !important; color: #00e676 !important; font-weight: 700; text-align: right; font-size: 0.95rem; outline: none; transition: all 0.3s ease;
         }
         .income-input:focus { border-color: #00e676 !important; background-color: #333 !important; box-shadow: 0 0 8px rgba(0, 230, 118, 0.2); }
 
-        .cycle-body { padding: 15px; }
-        .cycle-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9em; padding-bottom: 5px; border-bottom: 1px dashed #333; color: var(--text-secondary); }
-        .cycle-row.total-row { border-top: 1px solid #555; border-bottom: none; padding-top: 10px; font-weight: bold; font-size: 1.1em; color: var(--text-primary); }
-        .balance-final { margin-top: 10px; text-align: right; font-size: 1.4em; font-weight: 800; }
+        .cycle-body { padding: 12px; }
+        .cycle-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em; padding-bottom: 4px; border-bottom: 1px dashed #333; color: var(--text-secondary); }
+        .cycle-row.total-row { border-top: 1px solid #555; border-bottom: none; padding-top: 8px; font-weight: bold; font-size: 1em; color: var(--text-primary); }
+        .balance-final { margin-top: 8px; text-align: right; font-size: 1.3em; font-weight: 800; }
         .positive { color: var(--accent-green); }
         .negative { color: var(--accent-red); }
 
@@ -79,16 +119,19 @@
         .status-btn { padding: 4px 10px; font-size: 0.85em; }
         .btn-pay-now { background-color: #fbc02d; color: black; }
         .status-paid-badge { color: var(--accent-green); font-weight: bold; display: flex; align-items: center; gap: 5px; }
-        .btn-export { background-color: #2e7d32; color: white; display: flex; align-items: center; gap: 5px; }
-        .btn-edit { background-color: #444; color: white; padding: 5px 8px; }
-        .btn-delete { background-color: #c62828; color: white; padding: 5px 8px; }
+        .btn-export { background-color: #2e7d32; color: white; display: flex; align-items: center; gap: 5px; font-size: 0.9em; padding: 6px 12px; }
+        .btn-edit { background-color: #444; color: white; padding: 4px 8px; font-size: 0.9em; }
+        .btn-delete { background-color: #c62828; color: white; padding: 4px 8px; font-size: 0.9em; }
 
         /* TABELA */
-        .expense-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        .expense-table th { text-align: left; padding: 10px; border-bottom: 2px solid #444; color: white; font-weight: 700; text-transform: uppercase; font-size: 0.85em; }
-        .expense-table td { padding: 10px; border-bottom: 1px solid #333; color: var(--text-primary); }
-        .chart-section { background: var(--bg-card); }
-        .chart-container-wrapper { position: relative; height: 350px; width: 100%; }
+        .expense-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        .expense-table th { text-align: left; padding: 8px; border-bottom: 2px solid #444; color:black; font-weight: 700; text-transform: uppercase; font-size: 0.8em; background-color: #a0a0a0; /* Ajuste para legibilidade se necessário, mas mantendo a estrutura pedida */ }
+        /* OBS: Na sua versão anterior vc configurou TH preto. Mantive. */
+        
+        .expense-table td { padding: 8px; border-bottom: 1px solid #333; color: var(--text-primary); font-size: 0.9em; }
+        
+        .chart-section { background:black; padding: 10px; }
+        .chart-container-wrapper { position: relative; height: 300px; width: 100%; } /* Altura levemente reduzida */
         
         /* ESTILO DO NOVO MODAL DE CICLOS */
         .modal-buttons-vertical { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
@@ -105,7 +148,7 @@
     <div id="feedback-message"></div>
 
     <div class="main-wrapper">
-        <h1 style="text-align: center; margin-bottom: 20px;">Gerenciador de Gastos Pessoais</h1>
+        <h1>Gerenciador de Gastos Pessoais</h1>
 
         <div class="container">
             <div class="left-column">
@@ -189,7 +232,7 @@
             </div>
         </div>
 
-        <button id="manage-cycles-btn" style="margin: 30px auto; display: block; background-color: #555; color: white; padding: 12px 20px; font-size: 1rem;">
+        <button id="manage-cycles-btn" style="margin: 20px auto; display: block; background-color: #555; color: white; padding: 12px 20px; font-size: 0.95rem;">
             ⚙️ Gerenciar / Encerrar Ciclos
         </button>
     </div>
