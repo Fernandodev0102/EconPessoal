@@ -144,7 +144,7 @@ function renderChart() {
     if(labels.length>0) {
         myChart = new Chart(ctx, {
             type: 'bar', data: { labels, datasets: [{ label:'Gasto', data, backgroundColor:bg, borderWidth:1, borderRadius:4, barPercentage:0.6 }] },
-            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>formatCurrency(c.raw)}} }, scales:{x:{ticks:{callback:v=>'R$ '+v, color: '#a0a0a0'}, grid: {color: '#333'}}, y:{ticks:{color:'#a0a0a0', font:{size:14, weight:'bold'}}, grid: {color: '#333'}}} }
+            options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>formatCurrency(c.raw)}} }, scales:{x:{ticks:{callback:v=>'R$ '+v, color: '#141414'}, grid: {color: '#333'}}, y:{ticks:{color:'#1b1b1b', font:{size:14}}, grid: {color: '#525252d7'}}} }
         });
     }
 }

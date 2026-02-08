@@ -27,60 +27,68 @@
             --cycle-30-text: #ffb74d;
         }
 
-        /* RESET GERAL para remover bordas brancas do navegador */
+        /* RESET GERAL: Garante que o corpo ocupe tudo sem bordas brancas */
         body { 
             background-color: var(--bg-body); 
             color: var(--text-primary); 
             font-family: 'Inter', sans-serif; 
             margin: 0; 
             padding: 0; 
-            overflow-x: hidden; /* Evita rolagem lateral desnecessária */
+            width: 100vw; /* Largura total da Viewport */
+            overflow-x: hidden; 
         }
 
-        /* TÍTULO COMPACTO */
+        h1, h2, h3 { color: var(--text-primary); }
         h1 { 
-            color: var(--text-primary); 
             text-align: center; 
-            font-size: 1.4rem; /* Bem menor */
-            margin: 10px 0 15px 0; /* Margens reduzidas para ganhar espaço vertical */
-            font-weight: 600;
+            font-size: 1.4rem; 
+            margin: 10px 0; 
+            font-weight: 600; 
         }
-
-        h2, h3 { color: var(--text-primary); margin-top: 0; }
         label { color: var(--text-secondary); }
 
         /* ==========================================================================
-           2. LAYOUT TELA CHEIA (FULL WIDTH)
+           CORREÇÃO PRINCIPAL: MAIN-WRAPPER SEM LIMITES
+           ========================================================================== */
+        .main-wrapper {
+            width: 100%;        /* Força ocupar 100% da largura */
+            max-width: none !important; /* Remove qualquer trava de largura máxima */
+            margin: 0;          /* Remove centralização automática */
+            padding: 0;         /* Remove espaçamento interno */
+            display: block;
+        }
+
+        /* ==========================================================================
+           LAYOUT DA GRID (TELA CHEIA)
            ========================================================================== */
         .container { 
             display: grid; 
-            grid-template-columns: 300px 1fr; /* Lateral fixa um pouco mais estreita, resto flexível */
-            gap: 15px; /* Gap reduzido */
+            grid-template-columns: 300px 1fr; /* Lateral fixa, resto flexível */
+            gap: 15px; 
             
-            width: 100%;       /* Ocupa 100% da largura */
-            max-width: none;   /* Remove qualquer limite de tamanho */
+            width: 100%;       /* Ocupa 100% da main-wrapper */
+            max-width: none;   /* Garante que não tenha trava */
             
             margin: 0; 
-            padding: 10px;     /* Bordas bem próximas da extremidade (como solicitado) */
+            padding: 20px;     /* Borda fina (10px) para não colar na tela */
             box-sizing: border-box; 
         }
 
         @media (max-width: 900px) { 
             .container { 
                 grid-template-columns: 1fr; 
-                padding: 10px;
+                padding: 5px;
             } 
         }
 
-        .right-column { display: flex; flex-direction: column; gap: 15px; } /* Gap vertical reduzido */
+        .right-column { display: flex; flex-direction: column; gap: 15px; }
         .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); border: 1px solid #333; }
 
         /* INPUTS */
-        .form-group { margin-bottom: 12px; } /* Espaçamento reduzido entre inputs */
+        .form-group { margin-bottom: 12px; }
         .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85em; }
         .form-group input, .form-group select, .filter-section select, .filter-section input {
-            width: 100%; padding: 8px; /* Padding interno menor */
-            background-color: var(--input-bg); border: 1px solid var(--input-border); color: white; border-radius: 5px; box-sizing: border-box; font-size: 0.95em;
+            width: 100%; padding: 8px; background-color: var(--input-bg); border: 1px solid var(--input-border); color: white; border-radius: 5px; box-sizing: border-box; font-size: 0.95em;
         }
         .filter-section select, .filter-section input { width: auto; flex: 1; }
 
@@ -98,9 +106,9 @@
         .income-input:focus { border-color: #00e676 !important; background-color: #333 !important; box-shadow: 0 0 8px rgba(0, 230, 118, 0.2); }
 
         .cycle-body { padding: 12px; }
-        .cycle-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em; padding-bottom: 4px; border-bottom: 1px dashed #333; color: var(--text-secondary); }
-        .cycle-row.total-row { border-top: 1px solid #555; border-bottom: none; padding-top: 8px; font-weight: bold; font-size: 1em; color: var(--text-primary); }
-        .balance-final { margin-top: 8px; text-align: right; font-size: 1.3em; font-weight: 800; }
+        .cycle-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em; padding-bottom: 4px; border-bottom: 1px dashed #333; color:white; }
+        .cycle-row.total-row { border-top: 1px solid #555; border-bottom: none; padding-top: 8px; font-weight: bold; font-size: 20px; color: var(--text-primary); }
+        .balance-final { margin-top: 8px; text-align: right; font-size: 1.4em; font-weight: 800; }
         .positive { color: var(--accent-green); }
         .negative { color: var(--accent-red); }
 
@@ -125,13 +133,11 @@
 
         /* TABELA */
         .expense-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-        .expense-table th { text-align: left; padding: 8px; border-bottom: 2px solid #444; color:black; font-weight: 700; text-transform: uppercase; font-size: 0.8em; background-color: #a0a0a0; /* Ajuste para legibilidade se necessário, mas mantendo a estrutura pedida */ }
-        /* OBS: Na sua versão anterior vc configurou TH preto. Mantive. */
-        
+        .expense-table th { text-align: left; padding: 8px; border-bottom: 2px solid #444; color:black; font-weight: 700; text-transform: uppercase; font-size: 0.8em; background-color: #a0a0a0; }
         .expense-table td { padding: 8px; border-bottom: 1px solid #333; color: var(--text-primary); font-size: 0.9em; }
         
-        .chart-section { background:black; padding: 10px; }
-        .chart-container-wrapper { position: relative; height: 300px; width: 100%; } /* Altura levemente reduzida */
+        .chart-section { background:white; padding: 10px; }
+        .chart-container-wrapper { position: relative; height: 300px; width: 100%; }
         
         /* ESTILO DO NOVO MODAL DE CICLOS */
         .modal-buttons-vertical { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
