@@ -4,734 +4,151 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>EconPessoal - Gerenciador</title>
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/econ.css') }}"
-    />
-
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/econ.css') }}" />
     <style>
-      /* ==========================================================================
-           1. CONFIGURAÇÕES GERAIS E CORES (TEMA ESCURO - INTACTO)
-           ========================================================================== */
-      :root {
-        --bg-body: #121212;
-        --bg-card: #1e1e1e;
-        --text-primary: #e0e0e0;
-        --text-secondary: #a0a0a0;
-        --input-bg: #2d2d2d;
-        --input-border: #444;
-        --accent-green: #00e676;
-        --accent-red: #ff5252;
-        --cycle-15-bg: #1a3c40;
-        --cycle-15-text: #4dd0e1;
-        --cycle-30-bg: #3e2723;
-        --cycle-30-text: #ffb74d;
-      }
-
-      /* RESET GERAL: Garante que o corpo ocupe tudo sem bordas brancas */
-      body {
-        background-color: var(--bg-body);
-        color: var(--text-primary);
-        font-family: "Inter", sans-serif;
-        margin: 0;
-        padding: 0;
-        width: 100vw;
-        /* Largura total da Viewport */
-        overflow-x: hidden;
-      }
-
-      h1,
-      h2,
-      h3 {
-        color: var(--text-primary);
-      }
-
-      h1 {
-        text-align: center;
-        font-size: 1.4rem;
-        margin: 10px 0;
-        font-weight: 600;
-      }
-
-      label {
-        color: var(--text-secondary);
-      }
-
-      .main-wrapper {
-        width: 100%;
-        /* Força ocupar 100% da largura */
-        max-width: none !important;
-        /* Remove qualquer trava de largura máxima */
-        margin: 0;
-        /* Remove centralização automática */
-        padding: 0;
-        /* Remove espaçamento interno */
-        display: block;
-      }
-
-      /* ==========================================================================
-           LAYOUT DA GRID (TELA CHEIA)
-           ========================================================================== */
-      .container {
-        display: grid;
-        grid-template-columns: 300px 1fr;
-        /* Lateral fixa, resto flexível */
-        gap: 15px;
-
-        width: 100%;
-        /* Ocupa 100% da main-wrapper */
-        max-width: none;
-        /* Garante que não tenha trava */
-
-        margin: 0;
-        padding: 20px;
-        /* Borda fina (10px) para não colar na tela */
-        box-sizing: border-box;
-      }
-
-      @media (max-width: 900px) {
-        .container {
-          grid-template-columns: 1fr;
-          padding: 5px;
-        }
-      }
-
-      .right-column {
-        display: flex;
-        flex-direction: column;
-        gap: 15px;
-      }
-
-      .card {
-        background: var(--bg-card);
-        padding: 15px;
-        border-radius: 8px;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        border: 1px solid #333;
-      }
-
-      /* INPUTS */
-      .form-group {
-        margin-bottom: 12px;
-      }
-
-      .form-group label {
-        display: block;
-        margin-bottom: 4px;
-        font-weight: 600;
-        font-size: 0.85em;
-      }
-
-      .form-group input,
-      .form-group select,
-      .filter-section select,
-      .filter-section input {
-        width: 100%;
-        padding: 8px;
-        background-color: var(--input-bg);
-        border: 1px solid var(--input-border);
-        color: white;
-        border-radius: 5px;
-        box-sizing: border-box;
-        font-size: 0.95em;
-      }
-
-      .filter-section select,
-      .filter-section input {
-        width: auto;
-        flex: 1;
-      }
-
-      /* PAINEL DE CICLOS */
-      .cycles-dashboard {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 10px;
-      }
-
-      .cycle-card {
-        background: var(--bg-card);
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-        border: 1px solid #333;
-      }
-
-      .cycle-header {
-        padding: 10px;
-        font-weight: bold;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 0.95em;
-      }
-
-      .header-15 {
-        background-color: black;
-        color: white;
-        border-bottom: 2px solid white;
-      }
-
-      .header-30 {
-        background-color: black;
-        color: white;
-        border-bottom: 2px solid white;
-      }
-
-      .income-input-group {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-      }
-
-      .income-input {
-        width: 100px !important;
-        padding: 4px 8px !important;
-        background-color: #2d2d2d !important;
-        border: 1px solid #444 !important;
-        border-radius: 6px !important;
-        color: #00e676 !important;
-        font-weight: 700;
-        text-align: right;
-        font-size: 0.95rem;
-        outline: none;
-        transition: all 0.3s ease;
-      }
-
-      .income-input:focus {
-        border-color: #00e676 !important;
-        background-color: #333 !important;
-        box-shadow: 0 0 8px rgba(0, 230, 118, 0.2);
-      }
-
-      .cycle-body {
-        padding: 12px;
-      }
-
-      .cycle-row {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 6px;
-        font-size: 0.85em;
-        padding-bottom: 4px;
-        border-bottom: 1px dashed #333;
-        color: white;
-      }
-
-      .cycle-row.total-row {
-        border-top: 1px solid #555;
-        border-bottom: none;
-        padding-top: 8px;
-        font-weight: bold;
-        font-size: 20px;
-        color: var(--text-primary);
-      }
-
-      .balance-final {
-        margin-top: 8px;
-        text-align: right;
-        font-size: 1.4em;
-        font-weight: 800;
-      }
-
-      .positive {
-        color: var(--accent-green);
-      }
-
-      .negative {
-        color: var(--accent-red);
-      }
-
-      /* BOTOES E BADGES */
-      .badge-pgto {
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.8em;
-        font-weight: 600;
-        color: #fff;
-      }
-
-      .pgto-credito {
-        background-color: #c62828;
-      }
-
-      .pgto-debito {
-        background-color: #1565c0;
-      }
-
-      .pgto-pix {
-        background-color: #2e7d32;
-      }
-
-      .pgto-dinheiro {
-        background-color: #f9a825;
-        color: #000;
-      }
-
-      .pgto-outros {
-        background-color: #424242;
-      }
-
-      button {
-        cursor: pointer;
-        border: none;
-        border-radius: 4px;
-        padding: 10px;
-        font-weight: bold;
-      }
-
-      #save-expense-btn,
-      #add-category-btn {
-        background-color: var(--accent-green);
-        color: black;
-      }
-
-      #save-expense-btn:hover {
-        opacity: 0.9;
-      }
-
-      .status-btn {
-        padding: 4px 10px;
-        font-size: 0.85em;
-      }
-
-      .btn-pay-now {
-        background-color: #fbc02d;
-        color: black;
-      }
-
-      .status-paid-badge {
-        color: var(--accent-green);
-        font-weight: bold;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-      }
-
-      .btn-export {
-        background-color: #2e7d32;
-        color: white;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-size: 0.9em;
-        padding: 6px 12px;
-      }
-
-      .btn-edit {
-        background-color: #444;
-        color: white;
-        padding: 4px 8px;
-        font-size: 0.9em;
-      }
-
-      .btn-delete {
-        background-color: #c62828;
-        color: white;
-        padding: 4px 8px;
-        font-size: 0.9em;
-      }
-
-      /* TABELA */
-      .expense-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-top: 5px;
-      }
-
-      .expense-table th {
-        text-align: left;
-        padding: 8px;
-        border-bottom: 2px solid #444;
-        color: black;
-        font-weight: 700;
-        text-transform: uppercase;
-        font-size: 0.8em;
-        background-color: #a0a0a0;
-      }
-
-      .expense-table td {
-        padding: 8px;
-        border-bottom: 1px solid #333;
-        color: var(--text-primary);
-        font-size: 0.9em;
-      }
-
-      .chart-section {
-        background: white;
-        padding: 10px;
-      }
-
-      .chart-container-wrapper {
-        position: relative;
-        height: 300px;
-        width: 100%;
-      }
-
-      /* ESTILO DO NOVO MODAL DE CICLOS */
-      .modal-buttons-vertical {
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        margin-top: 15px;
-      }
-
-      .btn-cycle-15 {
-        background-color: var(--cycle-15-bg);
-        color: var(--cycle-15-text);
-        border: 1px solid var(--cycle-15-text);
-      }
-
-      .btn-cycle-30 {
-        background-color: var(--cycle-30-bg);
-        color: var(--cycle-30-text);
-        border: 1px solid var(--cycle-30-text);
-      }
-
-      .btn-danger-full {
-        background-color: #c62828;
-        color: white;
-      }
-
-      ::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      ::-webkit-scrollbar-track {
-        background: #121212;
-      }
-
-      ::-webkit-scrollbar-thumb {
-        background: #444;
-        border-radius: 4px;
-      }
+      :root { --bg-body: #121212; --bg-card: #1e1e1e; --text-primary: #e0e0e0; --text-secondary: #a0a0a0; --input-bg: #2d2d2d; --input-border: #444; --accent-green: #00e676; --accent-red: #ff5252; --cycle-15-bg: #1a3c40; --cycle-15-text: #4dd0e1; --cycle-30-bg: #3e2723; --cycle-30-text: #ffb74d; }
+      body { background-color: var(--bg-body); color: var(--text-primary); font-family: "Inter", sans-serif; margin: 0; padding: 0; width: 100vw; overflow-x: hidden; }
+      h1, h2, h3 { color: var(--text-primary); } h1 { text-align: center; font-size: 1.4rem; margin: 10px 0; font-weight: 600; } label { color: var(--text-secondary); }
+      .main-wrapper { width: 100%; max-width: none !important; margin: 0; padding: 0; display: block; }
+      .container { display: grid; grid-template-columns: 300px 1fr; gap: 15px; width: 100%; max-width: none; margin: 0; padding: 20px; box-sizing: border-box; }
+      @media (max-width: 900px) { .container { grid-template-columns: 1fr; padding: 5px; } }
+      .right-column { display: flex; flex-direction: column; gap: 15px; }
+      .card { background: var(--bg-card); padding: 15px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); border: 1px solid #333; }
+      .form-group { margin-bottom: 12px; } .form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85em; }
+      .form-group input, .form-group select, .filter-section select, .filter-section input { width: 100%; padding: 8px; background-color: var(--input-bg); border: 1px solid var(--input-border); color: white; border-radius: 5px; box-sizing: border-box; font-size: 0.95em; }
+      .filter-section select, .filter-section input { width: auto; flex: 1; }
+      .cycles-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .cycle-card { background: var(--bg-card); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3); border: 1px solid #333; }
+      .cycle-header { padding: 10px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; font-size: 0.95em; }
+      .header-15 { background-color: black; color: white; border-bottom: 2px solid white; }
+      .header-30 { background-color: black; color: white; border-bottom: 2px solid white; }
+      .income-input-group { display: flex; align-items: center; gap: 5px; }
+      .income-input { width: 100px !important; padding: 4px 8px !important; background-color: #2d2d2d !important; border: 1px solid #444 !important; border-radius: 6px !important; color: #00e676 !important; font-weight: 700; text-align: right; font-size: 0.95rem; outline: none; transition: all 0.3s ease; }
+      .income-input:focus { border-color: #00e676 !important; background-color: #333 !important; box-shadow: 0 0 8px rgba(0, 230, 118, 0.2); }
+      .cycle-body { padding: 12px; }
+      .cycle-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em; padding-bottom: 4px; border-bottom: 1px dashed #333; color: white; }
+      .cycle-row.total-row { border-top: 1px solid #555; border-bottom: none; padding-top: 8px; font-weight: bold; font-size: 20px; color: var(--text-primary); }
+      .balance-final { margin-top: 8px; text-align: right; font-size: 1.4em; font-weight: 800; }
+      .positive { color: var(--accent-green); } .negative { color: var(--accent-red); }
+      .badge-pgto { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; color: #fff; }
+      .pgto-credito { background-color: #c62828; } .pgto-debito { background-color: #1565c0; } .pgto-pix { background-color: #2e7d32; } .pgto-outros { background-color: #424242; }
+      button { cursor: pointer; border: none; border-radius: 4px; padding: 10px; font-weight: bold; }
+      #save-expense-btn, #add-category-btn, #save-account-btn, #save-card-btn { background-color: var(--accent-green); color: black; }
+      #save-expense-btn:hover { opacity: 0.9; }
+      .btn-edit { background-color: #444; color: white; padding: 4px 8px; font-size: 0.9em; }
+      .btn-delete { background-color: #c62828; color: white; padding: 4px 8px; font-size: 0.9em; }
+      .btn-export { background-color: #2e7d32; color: white; display: flex; align-items: center; gap: 5px; font-size: 0.9em; padding: 6px 12px; }
+      .expense-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+      .expense-table th { text-align: left; padding: 8px; border-bottom: 2px solid #444; color: black; font-weight: 700; text-transform: uppercase; font-size: 0.8em; background-color: #a0a0a0; }
+      .expense-table td { padding: 8px; border-bottom: 1px solid #333; color: var(--text-primary); font-size: 0.9em; }
+      .chart-section { background: white; padding: 10px; }
+      .chart-container-wrapper { position: relative; height: 300px; width: 100%; }
+      .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0, 0, 0, 0.8); align-items: center; justify-content: center; }
+      .modal.show { display: flex; }
+      .modal-content { background-color: var(--bg-card); margin: auto; padding: 20px; border: 1px solid #444; width: 90%; max-width: 500px; border-radius: 8px; color: white; }
+      .modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+      .modal-buttons-vertical { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+      .btn-cycle-15 { background-color: var(--cycle-15-bg); color: var(--cycle-15-text); border: 1px solid var(--cycle-15-text); }
+      .btn-cycle-30 { background-color: var(--cycle-30-bg); color: var(--cycle-30-text); border: 1px solid var(--cycle-30-text); }
+      .btn-danger-full { background-color: #c62828; color: white; }
+      .bank-account-item { background: #2d2d2d; padding: 10px; border-radius: 6px; margin-bottom: 10px; border: 1px solid #444; }
+      .bank-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+      .bank-name { font-weight: bold; color: var(--accent-green); font-size: 1.1em; }
+      .card-list-nested { margin-left: 15px; border-left: 2px solid #555; padding-left: 10px; }
+      .card-item-nested { display: flex; justify-content: space-between; align-items: center; font-size: 0.9em; margin-bottom: 5px; background: #333; padding: 5px; border-radius: 4px;}
+      .btn-sm-action { padding: 2px 6px; font-size: 0.75em; margin-left: 5px; }
+      .date-inputs-container { display: flex; gap: 5px; transition: opacity 0.3s ease; }
+      .date-inputs-container.hidden { display: none; }
+      ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #121212; } ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
     </style>
   </head>
 
   <body>
     <div id="feedback-message"></div>
-
     <div class="main-wrapper">
       <h1>Gerenciador de Gastos Pessoais</h1>
-
       <div class="container">
         <div class="left-column">
           <section class="card">
             <h2>Registrar Gasto</h2>
             <form id="expense-form">
               <input type="hidden" id="expense-id" />
-              <div class="form-group">
-                <label>Descrição:</label
-                ><input
-                  type="text"
-                  id="expense-description"
-                  placeholder="Ex: Mercado"
-                  required
-                />
-              </div>
-              <div class="form-group">
-                <label>Valor (R$):</label
-                ><input
-                  type="number"
-                  id="expense-value"
-                  placeholder="0.00"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div class="form-group">
-                <label>Data:</label
-                ><input type="date" id="expense-date" required />
-              </div>
-              <div class="form-group">
-                <label>Categoria:</label
-                ><select id="expense-category" required></select>
-              </div>
-              <div class="form-group">
-                <label>Forma de Pagamento / Ciclo:</label>
-                <select id="expense-payment" required>
-                  <option value="Pix">Pix / Dinheiro</option>
-                  <option value="Débito">Débito</option>
-                  <option value="Crédito15">
-                    Cartão de Crédito (Vence dia 15)
-                  </option>
-                  <option value="Crédito30">
-                    Cartão de Crédito (Vence dia 30)
-                  </option>
-                  <option value="Outros">Outros</option>
-                </select>
-                <small
-                  id="cycle-hint"
-                  style="
-                    display: block;
-                    margin-top: 5px;
-                    color: var(--text-secondary);
-                    font-size: 0.85em;
-                  "
-                  >Será descontado do Saldo do dia 15.</small
-                >
-              </div>
-              <div
-                class="form-group"
-                id="installments-group"
-                style="display: none"
-              >
-                <label>Parcelas:</label>
-                <select id="expense-installments">
-                  <option value="1">1x (À vista)</option>
-                  <option value="2">2x</option>
-                  <option value="3">3x</option>
-                  <option value="4">4x</option>
-                  <option value="5">5x</option>
-                  <option value="6">6x</option>
-                  <option value="7">7x</option>
-                  <option value="8">8x</option>
-                  <option value="9">9x</option>
-                  <option value="10">10x</option>
-                  <option value="11">11x</option>
-                  <option value="12">12x</option>
-                </select>
-              </div>
-              <button
-                type="submit"
-                id="save-expense-btn"
-                style="width: 100%; margin-top: 10px"
-              >
-                Salvar Gasto
-              </button>
+              <div class="form-group"><label>Descrição:</label><input type="text" id="expense-description" placeholder="Ex: Mercado" required /></div>
+              <div class="form-group"><label>Valor (R$):</label><input type="number" id="expense-value" placeholder="0.00" step="0.01" required /></div>
+              <div class="form-group"><label>Data:</label><input type="date" id="expense-date" required /></div>
+              <div class="form-group"><label>Categoria:</label><select id="expense-category" required></select></div>
+              <div class="form-group"><label>Forma de Pagamento:</label><select id="expense-payment" required><option value="Pix">Pix / Dinheiro</option><option value="Débito">Débito</option><option value="Credit_Card">Cartão de Crédito</option><option value="Outros">Outros</option></select></div>
+              <div class="form-group" id="account-choice-container" style="display: none; border: 1px dashed #444; padding: 10px; border-radius: 5px;"><label style="color: var(--accent-green);">Selecione a Conta / Cartão de Débito:</label><select id="expense-account-source"><option value="">-- Escolha --</option></select></div>
+              <div class="form-group" id="card-choice-container" style="display: none; border: 1px dashed #444; padding: 10px; border-radius: 5px;"><label style="color: var(--accent-red);">Selecione o Cartão de Crédito:</label><select id="expense-card-source"><option value="">-- Escolha o Cartão --</option></select></div>
+              <div class="form-group" id="installments-group" style="display: none"><label>Parcelas:</label><select id="expense-installments"><option value="1">1x (À vista)</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option><option value="6">6x</option><option value="7">7x</option><option value="8">8x</option><option value="9">9x</option><option value="10">10x</option><option value="11">11x</option><option value="12">12x</option></select></div>
+              <button type="submit" id="save-expense-btn" style="width: 100%; margin-top: 10px">Salvar Gasto</button>
             </form>
           </section>
+          
           <section class="card category-management">
             <h3>Nova Categoria</h3>
-            <div class="form-group">
-              <input type="text" id="new-category-name" placeholder="Nome" />
-            </div>
-            <button id="add-category-btn" style="width: 100%">
-              + Adicionar
-            </button>
+            <div class="form-group"><input type="text" id="new-category-name" placeholder="Nome" /></div>
+            <button id="add-category-btn" style="width: 100%">+ Adicionar</button>
             <h3 style="margin-top: 20px">Categorias</h3>
             <ul id="category-list" class="category-list"></ul>
+            <hr style="border-color: #333; margin: 20px 0;">
+            <button id="open-accounts-modal-btn" style="width: 100%; background-color: #444; color: white;">🏛️ Gerenciar Contas e Cartões</button>
           </section>
         </div>
 
         <div class="right-column">
           <div class="cycles-dashboard">
             <div class="cycle-card">
-              <div class="cycle-header header-15">
-                <span>Dia 15</span>
-                <div class="income-input-group">
-                  <span>R$</span
-                  ><input
-                    type="text"
-                    id="income-15"
-                    class="income-input"
-                    placeholder="0,00"
-                    oninput="maskCurrency(this)"
-                    onchange="updateIncome()"
-                  />
-                </div>
-              </div>
-              <div class="cycle-body">
-                <div class="cycle-row">
-                  <span>Gastos do Cartão (15):</span
-                  ><span id="card-total-15" style="color: var(--accent-red)"
-                    >R$ 0,00</span
-                  >
-                </div>
-                <div class="cycle-row">
-                  <span>Outros Gastos (1-15):</span
-                  ><span id="other-total-15" style="color: var(--accent-red)"
-                    >R$ 0,00</span
-                  >
-                </div>
-                <div class="cycle-row total-row">
-                  <span>Total Gastos:</span
-                  ><span id="total-cycle-15">R$ 0,00</span>
-                </div>
-                <div class="balance-final" id="balance-15">R$ 0,00</div>
-              </div>
+              <div class="cycle-header header-15"><span>Dia 15</span><div class="income-input-group"><span>R$</span><input type="text" id="income-15" class="income-input" placeholder="0,00" oninput="maskCurrency(this)" onchange="updateIncome()" /></div></div>
+              <div class="cycle-body"><div class="cycle-row"><span>Gastos do Cartão (15):</span><span id="card-total-15" style="color: var(--accent-red)">R$ 0,00</span></div><div class="cycle-row"><span>Outros Gastos (1-15):</span><span id="other-total-15" style="color: var(--accent-red)">R$ 0,00</span></div><div class="cycle-row total-row"><span>Total Gastos:</span><span id="total-cycle-15">R$ 0,00</span></div><div class="balance-final" id="balance-15">R$ 0,00</div></div>
             </div>
             <div class="cycle-card">
-              <div class="cycle-header header-30">
-                <span>Dia 30</span>
-                <div class="income-input-group">
-                  <span>R$</span
-                  ><input
-                    type="text"
-                    id="income-30"
-                    class="income-input"
-                    placeholder="0,00"
-                    oninput="maskCurrency(this)"
-                    onchange="updateIncome()"
-                  />
-                </div>
-              </div>
-              <div class="cycle-body">
-                <div class="cycle-row">
-                  <span>Gastos do Cartão (30):</span
-                  ><span id="card-total-30" style="color: var(--accent-red)"
-                    >R$ 0,00</span
-                  >
-                </div>
-                <div class="cycle-row">
-                  <span>Outros Gastos (16-31):</span
-                  ><span id="other-total-30" style="color: var(--accent-red)"
-                    >R$ 0,00</span
-                  >
-                </div>
-                <div class="cycle-row total-row">
-                  <span>Total Gastos:</span
-                  ><span id="total-cycle-30">R$ 0,00</span>
-                </div>
-                <div class="balance-final" id="balance-30">R$ 0,00</div>
-              </div>
+              <div class="cycle-header header-30"><span>Dia 30</span><div class="income-input-group"><span>R$</span><input type="text" id="income-30" class="income-input" placeholder="0,00" oninput="maskCurrency(this)" onchange="updateIncome()" /></div></div>
+              <div class="cycle-body"><div class="cycle-row"><span>Gastos do Cartão (30):</span><span id="card-total-30" style="color: var(--accent-red)">R$ 0,00</span></div><div class="cycle-row"><span>Outros Gastos (16-31):</span><span id="other-total-30" style="color: var(--accent-red)">R$ 0,00</span></div><div class="cycle-row total-row"><span>Total Gastos:</span><span id="total-cycle-30">R$ 0,00</span></div><div class="balance-final" id="balance-30">R$ 0,00</div></div>
             </div>
           </div>
-          <section class="card chart-section">
-            <div class="chart-container-wrapper">
-              <canvas id="expensesChart"></canvas>
-            </div>
-          </section>
+          
+          <section class="card chart-section"><div class="chart-container-wrapper"><canvas id="expensesChart"></canvas></div></section>
+          
           <section class="card expense-list-section">
-            <div
-              style="
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 10px;
-              "
-            >
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
               <h2 style="margin: 0">Histórico</h2>
               <div style="display: flex; gap: 10px">
                 <button id="export-btn" class="btn-export">📊 Excel</button>
-                <button
-                  id="clear-filters-btn"
-                  style="background: #444; color: white"
-                >
-                  Limpar Filtros
-                </button>
+                <button id="clear-filters-btn" style="background: #444; color: white">Limpar Filtros</button>
               </div>
             </div>
             <div class="filter-section">
-              <select id="filter-category" style="flex: 1">
-                <option value="">Categoria: Todas</option>
-              </select>
+              <select id="filter-category" style="flex: 1"><option value="">Categoria: Todas</option></select>
+              
               <select id="filter-payment" style="flex: 1">
-                <option value="">Pgto: Todos</option>
-                <option value="Crédito">Crédito (Geral)</option>
-                <option value="Pix">Pix/Débito</option>
+                  <option value="">Pgto: Todos</option>
+                  <option value="Crédito">Crédito</option>
+                  <option value="Vista">Débito / Pix</option>
               </select>
-              <input type="date" id="filter-date" style="flex: 1" />
+              
+              <select id="filter-cycle" style="flex: 1">
+                  <option value="">Ciclo: Todos</option>
+                  <option value="15">Ciclo Dia 15</option>
+                  <option value="30">Ciclo Dia 30</option>
+              </select>
+
+              <input type="month" id="filter-month" style="flex: 1" />
             </div>
-            <div
-              style="
-                max-height: 400px;
-                overflow-y: auto;
-                border-top: 1px solid #333;
-              "
-            >
-              <table class="expense-table">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Descrição</th>
-                    <th>Ciclo</th>
-                    <th>Valor</th>
-                    <th>Status</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody id="expense-table-body"></tbody>
-              </table>
+            <div style="max-height: 400px; overflow-y: auto; border-top: 1px solid #333;">
+              <table class="expense-table"><thead><tr><th>Data</th><th>Descrição</th><th>Conta/Ciclo</th><th>Valor</th><th>Status</th><th>Ações</th></tr></thead><tbody id="expense-table-body"></tbody></table>
             </div>
           </section>
         </div>
       </div>
-
-      <button
-        id="manage-cycles-btn"
-        style="
-          margin: 20px auto;
-          display: block;
-          background-color: #555;
-          color: white;
-          padding: 12px 20px;
-          font-size: 0.95rem;
-        "
-      >
-        ⚙️ Gerenciar / Encerrar Ciclos
-      </button>
+      <button id="manage-cycles-btn" style="margin: 20px auto; display: block; background-color: #555; color: white; padding: 12px 20px; font-size: 0.95rem;">⚙️ Gerenciar / Encerrar Ciclos</button>
     </div>
 
-    <div id="confirmation-modal" class="modal">
-      <div
-        class="modal-content"
-        style="background: var(--bg-card); color: white"
-      >
-        <h3 id="modal-title">Confirmação</h3>
-        <p id="modal-message">Você tem certeza?</p>
-        <div class="modal-buttons">
-          <button id="modal-confirm-btn">Confirmar</button
-          ><button
-            id="modal-cancel-btn"
-            class="btn-cancel"
-            style="background: #555"
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="cycles-modal" class="modal">
-      <div
-        class="modal-content"
-        style="background: var(--bg-card); color: white; max-width: 400px"
-      >
-        <h3>Gerenciar Ciclos</h3>
-        <p
-          style="
-            color: var(--text-secondary);
-            font-size: 0.9em;
-            margin-bottom: 15px;
-          "
-        >
-          Encerrar um ciclo remove apenas os gastos <b>passados</b> (data de
-          hoje ou anterior), mantendo as parcelas futuras protegidas.
-        </p>
-        <div class="modal-buttons-vertical">
-          <button onclick="closeCycle(15)" class="btn-cycle-15">
-            Encerrar Ciclo Dia 15
-          </button>
-          <button onclick="closeCycle(30)" class="btn-cycle-30">
-            Encerrar Ciclo Dia 30
-          </button>
-          <hr style="width: 100%; border-color: #444" />
-          <button onclick="resetAllData()" class="btn-danger-full">
-            ⚠️ Resetar TUDO (Perigo)
-          </button>
-        </div>
-        <button
-          onclick="
-            document.getElementById('cycles-modal').classList.remove('show')
-          "
-          style="
-            margin-top: 15px;
-            background: transparent;
-            color: #aaa;
-            width: 100%;
-          "
-        >
-          Fechar
-        </button>
-      </div>
-    </div>
-
+    <div id="confirmation-modal" class="modal"><div class="modal-content" style="background: var(--bg-card); color: white"><h3 id="modal-title">Confirmação</h3><p id="modal-message">Você tem certeza?</p><div class="modal-buttons"><button id="modal-confirm-btn">Confirmar</button><button id="modal-cancel-btn" class="btn-cancel" style="background: #555">Cancelar</button></div></div></div>
+    <div id="cycles-modal" class="modal"><div class="modal-content" style="background: var(--bg-card); color: white; max-width: 400px"><h3>Gerenciar Ciclos</h3><div class="modal-buttons-vertical"><button onclick="closeCycle(15)" class="btn-cycle-15">Encerrar Ciclo Dia 15</button><button onclick="closeCycle(30)" class="btn-cycle-30">Encerrar Ciclo Dia 30</button></div><button onclick="document.getElementById('cycles-modal').classList.remove('show')" style="margin-top: 15px; background: transparent; color: #aaa; width: 100%;">Fechar</button></div></div>
+    <div id="accounts-modal" class="modal"><div class="modal-content" style="background: var(--bg-card); color: white; max-width: 550px;"><h3>Minhas Contas e Cartões</h3><div style="background: #333; padding: 10px; border-radius: 6px; margin-bottom: 15px; display: flex; gap: 5px;"><input type="text" id="new-account-name" placeholder="Nova Conta (Ex: Banco Inter)" style="flex: 1;"><button id="save-account-btn" style="width: auto;">+ Conta</button></div><div id="accounts-list-display" style="max-height: 400px; overflow-y: auto;"></div><button id="close-accounts-modal-btn" style="margin-top: 15px; background: transparent; color: #aaa; width: 100%;">Fechar</button></div></div>
     <script src="{{ url_for('static', filename='js/econfinancas2.js') }}"></script>
   </body>
 </html>
