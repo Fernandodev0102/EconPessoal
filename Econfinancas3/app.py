@@ -1,20 +1,39 @@
-import os
-import csv
-import io
-from flask import Flask, render_template, request, jsonify, Response
-from flask_sqlalchemy import SQLAlchemy
 import uuid
+import os
+from flask import Flask, request, jsonify, render_template
+from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
+# --- CONFIGURAÇÃO "BLINDADA" DO BANCO DE DADOS ---
 app = Flask(__name__)
 
-# ==============================================================================
-# CONFIGURAÇÃO DO BANCO DE DADOS
-# ==============================================================================
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///econfinancas.db'
+# 1. Pega o caminho absoluto da pasta onde o app.py está
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# 2. Define onde a pasta 'instance' deve ficar
+instance_path = os.path.join(basedir, 'instance')
+
+# 3. CRIA A PASTA SE ELA NÃO EXISTIR (Isso resolve o problema de não criar o arquivo)
+if not os.path.exists(instance_path):
+    os.makedirs(instance_path)
+    print(f"--> CRIANDO PASTA INSTANCE EM: {instance_path}")
+
+# 4. Configura o banco de dados
+db_path = os.path.join(instance_path, 'econfinancas.db')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
+
+# 5. GARANTE QUE AS TABELAS EXISTEM ANTES DE RODAR
+with app.app_context():
+    db.create_all()
+    print("-" * 50)
+    print(f"--> BANCO DE DADOS PRONTO E CONECTADO:\n{db_path}")
+    print("-" * 50)
+# -------------------------------------------------
+
+# ... (Mantenha o resto do seu código: class Expense, rotas @app.route, etc.) ...
 
 # ==============================================================================
 # FUNÇÕES AUXILIARES
