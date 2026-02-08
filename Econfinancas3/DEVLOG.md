@@ -29,3 +29,9 @@ Por hoje é isso.
 Retomando o projeto...hoje vou tentar implementar mais funcionalidades no aplciativo pra ficar mais usual e útil..acho que ainda tem muita coisa a ser adicionada então tenho bastante trabalho a fazer kk.
 
 Fiquei o mês de janeiro inteiro sem fazer nada no projeto mas agora vou retomar.
+
+
+
+**Dia 08/02/2026**
+
+Adicionei diversos recursos ao aplicativo, decidi que vou criar ele unicamente para uso pessoal, o dia que eu decidir colocar ele em domínio eu me viro para conseguir, estou tentando manter a rotina de constância nesse projeto e está sendo bem bacana, criei e resolvi problemas intensos kkk, apesar de ainda não estar escrevendo código diretamente, estou tentando entender bem as lógicas e por enquanto consigo fazer apenas ajustes pontuais no html, quem sabe no futuro eu aprenda a personalizar os 3 códigos, acho que vou constuir isso com o tempo mesmo.
