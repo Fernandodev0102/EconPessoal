@@ -26,22 +26,15 @@ def add_months(source_date, months):
     return source_date.replace(year=year, month=month, day=day)
 
 def calculate_cycle(expense, card=None):
-    """Define se o gasto pertence ao ciclo 15 ou 30"""
-    cycle = 30 # Default
-    
-    # Determina tipo do cartão se passado
+    cycle = 30 
     c_type = card.card_type if card else None
     c_due = card.due_day if card else None
-
-    # É Crédito?
     is_truly_credit = ('Crédito' in expense.payment_method) or (c_type == 'CREDIT')
 
     if is_truly_credit:
-        # Regra Crédito: Vencimento <= 15 -> Ciclo 15
         if c_due and int(c_due) <= 15: cycle = 15
         else: cycle = 30
     else:
-        # Regra Débito: Compra dia <= 15 -> Ciclo 15
         if expense.date.day <= 15: cycle = 15
         else: cycle = 30
     return cycle
@@ -89,29 +82,44 @@ def index(): return render_template('index.html')
 def handle_expenses():
     if request.method == 'GET':
         query = Expense.query
+        
         cat = request.args.get('category')
         pay = request.args.get('payment_method')
         month_str = request.args.get('month') 
         cycle_filter = request.args.get('cycle')
         
+        # NOVO: Filtro de Origem (Conta ou Cartão)
+        source_filter = request.args.get('source') 
+        
         if cat: query = query.filter_by(category=cat)
+        
         if pay:
             if pay == "Crédito": query = query.filter(Expense.payment_method.like('%Crédito%'))
             elif pay == "Vista": query = query.filter(Expense.payment_method.in_(['Pix', 'Débito', 'Dinheiro']))
             else: query = query.filter_by(payment_method=pay)
+        
         if month_str:
             try:
                 year, month = map(int, month_str.split('-'))
                 query = query.filter(extract('year', Expense.date) == year, extract('month', Expense.date) == month)
             except: pass
             
+        # LÓGICA DO NOVO FILTRO DE ORIGEM
+        if source_filter:
+            if source_filter.startswith('ACC-'):
+                # Filtra pela Conta Bancária (Débito/Pix dessa conta)
+                acc_id = int(source_filter.split('-')[1])
+                query = query.filter(Expense.bank_account_id == acc_id)
+            elif source_filter.startswith('CARD-'):
+                # Filtra pelo Cartão Específico (Crédito ou Débito vinculado)
+                card_id = int(source_filter.split('-')[1])
+                query = query.filter(Expense.card_id == card_id)
+
         expenses_raw = query.order_by(Expense.date.desc()).all()
         output = []
         for e in expenses_raw:
             card_obj = Card.query.get(e.card_id) if e.card_id else None
             c_due = card_obj.due_day if card_obj else None
-            
-            # Usa a função unificada
             expense_cycle = calculate_cycle(e, card_obj)
             
             if cycle_filter and str(expense_cycle) != str(cycle_filter): continue 
@@ -162,11 +170,9 @@ def handle_expenses():
 def expense_ops(id):
     e = Expense.query.get(id)
     if not e: return jsonify({'error': '404'}), 404
-    
     if request.method == 'DELETE':
         db.session.delete(e); db.session.commit()
         return jsonify({'message': 'Excluído'})
-        
     if request.method == 'PUT':
         d = request.json
         try:
@@ -183,29 +189,19 @@ def expense_ops(id):
             return jsonify({'message': 'Ok'})
         except Exception as err: return jsonify({'error': str(err)}), 500
 
-# --- ROTA NOVA: ENCERRAR CICLO ---
 @app.route('/api/cycles/close/<int:cycle_day>', methods=['POST'])
 def close_cycle_route(cycle_day):
-    """
-    Remove gastos do ciclo X (15 ou 30) que tenham data <= Hoje.
-    Isso serve para 'limpar' o dashboard de gastos já passados/pagos.
-    """
     today = date.today()
     all_expenses = Expense.query.filter(Expense.date <= today).all()
-    
     deleted_count = 0
     for e in all_expenses:
         card_obj = Card.query.get(e.card_id) if e.card_id else None
-        
-        # Verifica se esse gasto pertence ao ciclo que estamos fechando
         if calculate_cycle(e, card_obj) == cycle_day:
-            db.session.delete(e)
-            deleted_count += 1
-            
+            db.session.delete(e); deleted_count += 1
     db.session.commit()
     return jsonify({'message': f'Ciclo {cycle_day} encerrado! {deleted_count} gastos arquivados.'})
 
-# --- ROTAS DE CONTAS, CARTÕES, CATEGORIAS (MANTIDAS IGUAIS) ---
+# --- ROTAS DE CONTAS E AUXILIARES ---
 @app.route('/api/accounts', methods=['GET', 'POST'])
 def manage_accounts():
     if request.method == 'POST':

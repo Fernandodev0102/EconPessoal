@@ -3,12 +3,12 @@
    ========================================================================== */
 const API_URL = "http://127.0.0.1:5000/api";
 let expensesChart = null;
-let currentAccountsData = []; 
+let currentAccountsData = [];
 let currentExpensesData = [];
 
 document.addEventListener("DOMContentLoaded", () => {
     const today = new Date();
-    const monthStr = today.toISOString().slice(0, 7); 
+    const monthStr = today.toISOString().slice(0, 7);
     document.getElementById("filter-month").value = monthStr;
 
     loadExpenses();
@@ -21,12 +21,13 @@ document.addEventListener("DOMContentLoaded", () => {
 function setupEventListeners() {
     document.getElementById("expense-form").addEventListener("submit", addOrUpdateExpense);
     document.getElementById("add-category-btn").addEventListener("click", addCategory);
-    
+
     document.getElementById("filter-category").addEventListener("change", loadExpenses);
     document.getElementById("filter-payment").addEventListener("change", loadExpenses);
     document.getElementById("filter-month").addEventListener("change", loadExpenses);
-    document.getElementById("filter-cycle").addEventListener("change", loadExpenses); 
-    
+    document.getElementById("filter-cycle").addEventListener("change", loadExpenses);
+    document.getElementById("filter-source").addEventListener("change", loadExpenses); // <--- NOVO LISTENER
+
     document.getElementById("clear-filters-btn").addEventListener("click", clearFilters);
     document.getElementById("export-btn").addEventListener("click", exportToExcel);
 
@@ -36,7 +37,7 @@ function setupEventListeners() {
     document.getElementById("modal-cancel-btn").addEventListener("click", () => closeModal("confirmation-modal"));
     document.getElementById("save-account-btn").addEventListener("click", saveNewAccount);
 
-    document.getElementById("expense-payment").addEventListener("change", function() {
+    document.getElementById("expense-payment").addEventListener("change", function () {
         const method = this.value;
         const installmentsGroup = document.getElementById("installments-group");
         const cardContainer = document.getElementById("card-choice-container");
@@ -63,8 +64,11 @@ async function loadAccountsAndCards() {
         currentAccountsData = await response.json();
         renderAccountsModal();
         renderFormDropdowns();
+        renderFilterOptions(); // <--- NOVA CHAMADA PARA POPULAR FILTRO
     } catch (error) { console.error("Erro ao carregar contas:", error); }
 }
+
+// ... (renderAccountsModal e toggleCardDates permanecem iguais) ...
 function renderAccountsModal() {
     const container = document.getElementById("accounts-list-display");
     container.innerHTML = "";
@@ -83,12 +87,14 @@ function renderAccountsModal() {
         container.appendChild(accDiv);
     });
 }
-window.toggleCardDates = function(accountId) {
+window.toggleCardDates = function (accountId) {
     const type = document.getElementById(`new-card-type-${accountId}`).value;
     const dateContainer = document.getElementById(`date-inputs-${accountId}`);
     if (type === 'DEBIT') dateContainer.style.display = 'none';
     else dateContainer.style.display = 'flex';
 }
+
+// ... (renderFormDropdowns permanece igual) ...
 function renderFormDropdowns() {
     const accSelect = document.getElementById("expense-account-source");
     const cardSelect = document.getElementById("expense-card-source");
@@ -102,14 +108,44 @@ function renderFormDropdowns() {
         if (creditCards.length > 0) { const groupC = document.createElement("optgroup"); groupC.label = acc.name; creditCards.forEach(c => { const opt = document.createElement("option"); opt.value = c.id; opt.textContent = `💳 ${c.name} (Vence dia ${c.due_day})`; groupC.appendChild(opt); }); cardSelect.appendChild(groupC); }
     });
 }
-async function saveNewAccount() { const nameInput = document.getElementById("new-account-name"); if(!nameInput.value) return; await fetch(`${API_URL}/accounts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameInput.value }) }); nameInput.value = ""; loadAccountsAndCards(); }
-async function deleteAccount(id) { if(confirm("Excluir conta?")) { await fetch(`${API_URL}/accounts/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
+
+// NOVA FUNÇÃO: POPULA O FILTRO DE ORIGEM
+function renderFilterOptions() {
+    const filterSelect = document.getElementById("filter-source");
+    filterSelect.innerHTML = '<option value="">Origem: Todas</option>';
+
+    currentAccountsData.forEach(acc => {
+        const group = document.createElement("optgroup");
+        group.label = acc.name;
+
+        // Opção para a Conta (Débito/Pix)
+        const accOpt = document.createElement("option");
+        accOpt.value = `ACC-${acc.id}`;
+        accOpt.textContent = `Conta (Débito/Pix)`;
+        group.appendChild(accOpt);
+
+        // Opções para cada Cartão
+        acc.cards.forEach(card => {
+            const cardOpt = document.createElement("option");
+            cardOpt.value = `CARD-${card.id}`;
+            const type = card.type === 'CREDIT' ? 'Crédito' : 'Débito';
+            cardOpt.textContent = `${card.name} (${type})`;
+            group.appendChild(cardOpt);
+        });
+
+        filterSelect.appendChild(group);
+    });
+}
+
+// ... (AÇÕES DE CONTA E CARTÃO - IGUAIS) ...
+async function saveNewAccount() { const nameInput = document.getElementById("new-account-name"); if (!nameInput.value) return; await fetch(`${API_URL}/accounts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameInput.value }) }); nameInput.value = ""; loadAccountsAndCards(); }
+async function deleteAccount(id) { if (confirm("Excluir conta?")) { await fetch(`${API_URL}/accounts/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
 async function addCardToAccount(accountId) {
     const name = document.getElementById(`new-card-name-${accountId}`).value; const type = document.getElementById(`new-card-type-${accountId}`).value; const close = document.getElementById(`new-card-closing-${accountId}`).value; const due = document.getElementById(`new-card-due-${accountId}`).value;
-    if(!name) { alert("Nome obrigatório"); return; } if(type === 'CREDIT' && (!close || !due)) { alert("Para crédito, preencha as datas"); return; }
+    if (!name) { alert("Nome obrigatório"); return; } if (type === 'CREDIT' && (!close || !due)) { alert("Para crédito, preencha as datas"); return; }
     await fetch(`${API_URL}/cards`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name, card_type: type, closing_day: close || null, due_day: due || null, bank_account_id: accountId }) }); loadAccountsAndCards();
 }
-async function deleteCard(id) { if(confirm("Excluir cartão?")) { await fetch(`${API_URL}/cards/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
+async function deleteCard(id) { if (confirm("Excluir cartão?")) { await fetch(`${API_URL}/cards/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
 
 /* CRUD GASTOS */
 async function loadExpenses() {
@@ -129,14 +165,18 @@ function buildQueryString() {
     const p = document.getElementById("filter-payment").value;
     const m = document.getElementById("filter-month").value;
     const cy = document.getElementById("filter-cycle").value;
+    const src = document.getElementById("filter-source").value; // <--- LÊ O NOVO FILTRO
+
     let q = "?";
-    if(c) q+=`category=${encodeURIComponent(c)}&`;
-    if(p) q+=`payment_method=${encodeURIComponent(p)}&`;
-    if(m) q+=`month=${m}&`;
-    if(cy) q+=`cycle=${cy}&`;
+    if (c) q += `category=${encodeURIComponent(c)}&`;
+    if (p) q += `payment_method=${encodeURIComponent(p)}&`;
+    if (m) q += `month=${m}&`;
+    if (cy) q += `cycle=${cy}&`;
+    if (src) q += `source=${src}&`; // <--- ENVIA PRO BACKEND
     return q;
 }
 
+// ... (RESTANTE DO ARQUIVO IGUAL) ...
 async function addOrUpdateExpense(event) {
     event.preventDefault();
     const id = document.getElementById("expense-id").value;
@@ -150,17 +190,17 @@ async function addOrUpdateExpense(event) {
 
     if (payMethod === "Credit_Card") {
         cardId = document.getElementById("expense-card-source").value;
-        if(!cardId) { alert("Erro: Você deve selecionar um Cartão de Crédito!"); return; }
-        finalMethod = "Crédito"; 
-        const sel = document.getElementById("expense-card-source"); 
-        if(sel.selectedIndex > -1) accName = sel.options[sel.selectedIndex].text;
-    } 
+        if (!cardId) { alert("Erro: Você deve selecionar um Cartão de Crédito!"); return; }
+        finalMethod = "Crédito";
+        const sel = document.getElementById("expense-card-source");
+        if (sel.selectedIndex > -1) accName = sel.options[sel.selectedIndex].text;
+    }
     else if (payMethod === "Débito" || payMethod === "Pix") {
         const sourceVal = document.getElementById("expense-account-source").value;
-        if(sourceVal) {
+        if (sourceVal) {
             const sel = document.getElementById("expense-account-source");
             accName = sel.options[sel.selectedIndex].text + ` (${payMethod})`;
-            if(sourceVal.startsWith("ACC-")) bankId = sourceVal.split("-")[1];
+            if (sourceVal.startsWith("ACC-")) bankId = sourceVal.split("-")[1];
             else if (sourceVal.startsWith("CARD-")) cardId = sourceVal.split("-")[1];
         }
     }
@@ -177,7 +217,7 @@ async function addOrUpdateExpense(event) {
         const method = id ? "PUT" : "POST";
         const url = id ? `${API_URL}/expenses/${id}` : `${API_URL}/expenses`;
         const response = await fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        if(!response.ok) throw new Error("Erro ao salvar");
+        if (!response.ok) throw new Error("Erro ao salvar");
         document.getElementById("expense-form").reset();
         document.getElementById("expense-id").value = "";
         document.getElementById("save-expense-btn").textContent = "Salvar Gasto";
@@ -187,12 +227,12 @@ async function addOrUpdateExpense(event) {
         document.getElementById("installments-group").style.display = "none";
         showFeedback("Salvo com sucesso!", "success");
         loadExpenses();
-    } catch(e) { console.error(e); showFeedback("Erro ao salvar.", "error"); }
+    } catch (e) { console.error(e); showFeedback("Erro ao salvar.", "error"); }
 }
 
-window.editExpense = function(id) {
+window.editExpense = function (id) {
     const expense = currentExpensesData.find(e => e.id === id);
-    if(!expense) return;
+    if (!expense) return;
     document.getElementById("expense-id").value = expense.id;
     document.getElementById("expense-description").value = expense.description;
     document.getElementById("expense-value").value = expense.amount;
@@ -200,16 +240,16 @@ window.editExpense = function(id) {
     document.getElementById("expense-category").value = expense.category;
     const paymentSelect = document.getElementById("expense-payment");
     const installmentsSelect = document.getElementById("expense-installments");
-    
+
     if (expense.payment_method === "Crédito") {
         paymentSelect.value = "Credit_Card";
         paymentSelect.dispatchEvent(new Event('change'));
-        setTimeout(() => { if(expense.card_id) document.getElementById("expense-card-source").value = expense.card_id; }, 100);
+        setTimeout(() => { if (expense.card_id) document.getElementById("expense-card-source").value = expense.card_id; }, 100);
     } else if (expense.bank_account_id || (expense.card_id && expense.payment_method !== "Crédito")) {
         paymentSelect.value = expense.payment_method;
         paymentSelect.dispatchEvent(new Event('change'));
-        setTimeout(() => { 
-            if(expense.bank_account_id) document.getElementById("expense-account-source").value = `ACC-${expense.bank_account_id}`;
+        setTimeout(() => {
+            if (expense.bank_account_id) document.getElementById("expense-account-source").value = `ACC-${expense.bank_account_id}`;
             else if (expense.card_id) document.getElementById("expense-account-source").value = `CARD-${expense.card_id}`;
         }, 100);
     } else {
@@ -222,7 +262,7 @@ window.editExpense = function(id) {
     btn.style.backgroundColor = "#fbc02d";
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
-window.deleteExpense = async function(id) { if(confirm("Excluir?")) { await fetch(`${API_URL}/expenses/${id}`, {method:"DELETE"}); loadExpenses(); } }
+window.deleteExpense = async function (id) { if (confirm("Excluir?")) { await fetch(`${API_URL}/expenses/${id}`, { method: "DELETE" }); loadExpenses(); } }
 
 function renderTable(expenses) {
     const tbody = document.getElementById("expense-table-body");
@@ -231,15 +271,15 @@ function renderTable(expenses) {
         const row = document.createElement("tr");
         const d = e.date.split("-");
         let badge = "pgto-outros";
-        if(e.payment_method.includes("Crédito")) badge = "pgto-credito";
-        else if(e.payment_method === "Débito") badge = "pgto-debito";
-        else if(e.payment_method === "Pix") badge = "pgto-pix";
+        if (e.payment_method.includes("Crédito")) badge = "pgto-credito";
+        else if (e.payment_method === "Débito") badge = "pgto-debito";
+        else if (e.payment_method === "Pix") badge = "pgto-pix";
 
         let desc = e.description;
-        if(e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
-        
+        if (e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
+
         let accDisplay = e.account;
-        if(e.computed_cycle) accDisplay = `Ciclo ${e.computed_cycle}`; 
+        if (e.computed_cycle) accDisplay = `Ciclo ${e.computed_cycle}`;
 
         row.innerHTML = `<td>${d[2]}/${d[1]}/${d[0]}</td><td><div style="font-weight:600">${desc}</div><div style="font-size:0.8em; color:#aaa;">${e.category}</div></td><td><div style="font-size:0.85em;">${accDisplay}</div></td><td style="font-weight:bold;">R$ ${e.amount.toFixed(2)}</td><td><span class="badge-pgto ${badge}">${e.payment_method}</span></td><td style="display:flex; gap:5px;"><button class="btn-edit" onclick="editExpense('${e.id}')">✏️</button><button class="btn-delete" onclick="deleteExpense('${e.id}')">🗑️</button></td>`;
         tbody.appendChild(row);
@@ -247,19 +287,19 @@ function renderTable(expenses) {
 }
 
 function updateDashboard(expenses) {
-    let c15=0, o15=0, c30=0, o30=0;
+    let c15 = 0, o15 = 0, c30 = 0, o30 = 0;
     expenses.forEach(e => {
         const isCred = e.payment_method.includes("Crédito");
-        const cycle = e.computed_cycle; 
-        if(isCred) { if(cycle === 15) c15 += e.amount; else c30 += e.amount; } else { if(cycle === 15) o15 += e.amount; else o30 += e.amount; }
+        const cycle = e.computed_cycle;
+        if (isCred) { if (cycle === 15) c15 += e.amount; else c30 += e.amount; } else { if (cycle === 15) o15 += e.amount; else o30 += e.amount; }
     });
     document.getElementById("card-total-15").textContent = formatCurrency(c15);
     document.getElementById("other-total-15").textContent = formatCurrency(o15);
-    document.getElementById("total-cycle-15").textContent = formatCurrency(c15+o15);
+    document.getElementById("total-cycle-15").textContent = formatCurrency(c15 + o15);
     document.getElementById("card-total-30").textContent = formatCurrency(c30);
     document.getElementById("other-total-30").textContent = formatCurrency(o30);
-    document.getElementById("total-cycle-30").textContent = formatCurrency(c30+o30);
-    calculateBalances(c15+o15, c30+o30);
+    document.getElementById("total-cycle-30").textContent = formatCurrency(c30 + o30);
+    calculateBalances(c15 + o15, c30 + o30);
 }
 
 // UTILS
@@ -286,21 +326,21 @@ async function addCategory() {
     await fetch(`${API_URL}/categories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameInput.value }), });
     nameInput.value = ""; loadCategories();
 }
-window.editCategory = async function(id, currentName) {
+window.editCategory = async function (id, currentName) {
     const newName = prompt("Novo nome:", currentName);
     if (newName && newName !== currentName) { await fetch(`${API_URL}/categories/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) }); loadCategories(); }
 }
-window.deleteCategory = async function(id) { if (confirm("Excluir?")) { await fetch(`${API_URL}/categories/${id}`, { method: "DELETE" }); loadCategories(); } }
+window.deleteCategory = async function (id) { if (confirm("Excluir?")) { await fetch(`${API_URL}/categories/${id}`, { method: "DELETE" }); loadCategories(); } }
 function updateIncome() {
     const income15 = parseCurrency(document.getElementById("income-15").value);
     const income30 = parseCurrency(document.getElementById("income-30").value);
     localStorage.setItem("income15", income15); localStorage.setItem("income30", income30);
-    loadExpenses(); 
+    loadExpenses();
 }
 function calculateBalances(total15, total30) {
     let val15 = localStorage.getItem("income15") || 0; let val30 = localStorage.getItem("income30") || 0;
-    if(document.getElementById("income-15").value === "") document.getElementById("income-15").value = formatSimple(val15);
-    if(document.getElementById("income-30").value === "") document.getElementById("income-30").value = formatSimple(val30);
+    if (document.getElementById("income-15").value === "") document.getElementById("income-15").value = formatSimple(val15);
+    if (document.getElementById("income-30").value === "") document.getElementById("income-30").value = formatSimple(val30);
     const balance15 = parseFloat(val15) - total15; const balance30 = parseFloat(val30) - total30;
     const el15 = document.getElementById("balance-15"); const el30 = document.getElementById("balance-30");
     el15.textContent = formatCurrency(balance15); el15.className = "balance-final " + (balance15 >= 0 ? "positive" : "negative");
@@ -310,16 +350,17 @@ function formatCurrency(value) { return value.toLocaleString("pt-BR", { style: "
 function formatSimple(value) { return parseFloat(value).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
 function parseCurrency(strValue) { if (!strValue) return 0; return parseFloat(strValue.replace(/\./g, "").replace(",", ".")); }
 function maskCurrency(input) { let value = input.value.replace(/\D/g, ""); value = (value / 100).toFixed(2) + ""; value = value.replace(".", ","); value = value.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."); input.value = value; }
-function clearFilters() { 
+function clearFilters() {
     const today = new Date();
     document.getElementById("filter-month").value = today.toISOString().slice(0, 7);
-    document.getElementById("filter-category").value = ""; 
-    document.getElementById("filter-payment").value = ""; 
-    document.getElementById("filter-cycle").value = ""; 
-    loadExpenses(); 
+    document.getElementById("filter-category").value = "";
+    document.getElementById("filter-payment").value = "";
+    document.getElementById("filter-cycle").value = "";
+    document.getElementById("filter-source").value = ""; // RESET ORIGEM
+    loadExpenses();
 }
 function showFeedback(message, type) { const el = document.getElementById("feedback-message"); el.textContent = message; el.className = type; el.style.display = "block"; setTimeout(() => { el.style.display = "none"; }, 3000); }
-function openModal(id) { document.getElementById(id).classList.add("show"); if(id === 'accounts-modal') loadAccountsAndCards(); }
+function openModal(id) { document.getElementById(id).classList.add("show"); if (id === 'accounts-modal') loadAccountsAndCards(); }
 function closeModal(id) { document.getElementById(id).classList.remove("show"); }
 function showConfirmation(message, onConfirm) { const modal = document.getElementById("confirmation-modal"); document.getElementById("modal-message").textContent = message; modal.classList.add("show"); const oldBtn = document.getElementById("modal-confirm-btn"); const newBtn = oldBtn.cloneNode(true); oldBtn.parentNode.replaceChild(newBtn, oldBtn); newBtn.addEventListener("click", () => { onConfirm(); closeModal("confirmation-modal"); }); }
 
@@ -335,18 +376,17 @@ function closeCycle(day) {
 
 function exportToExcel() {
     if (currentExpensesData.length === 0) { alert("Sem dados para exportar."); return; }
-    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
     csvContent += "Data;Descrição;Categoria;Valor;Pagamento;Conta;Parcela\n";
     currentExpensesData.forEach(e => {
         const val = e.amount.toString().replace('.', ',');
-        // CORREÇÃO: "1 de 7" para o Excel entender como Texto e não Data
         const inst = e.total_installments > 1 ? `${e.current_installment} de ${e.total_installments}` : '1x';
         csvContent += `${e.date};${e.description};${e.category};${val};${e.payment_method};${e.account};${inst}\n`;
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `gastos_export_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `gastos_export_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
 }
 
