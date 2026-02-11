@@ -438,6 +438,30 @@
       display: none;
     }
 
+    /* Toggle Graficos */
+    .chart-toggles {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .chart-toggle-btn {
+      background: #eee;
+      color: #333;
+      border: 1px solid #ccc;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.85em;
+    }
+
+    .chart-toggle-btn.active {
+      background: var(--accent-green);
+      color: black;
+      font-weight: bold;
+      border-color: var(--accent-green);
+    }
+
     ::-webkit-scrollbar {
       width: 8px;
     }
@@ -551,6 +575,11 @@
         </div>
 
         <section class="card chart-section">
+          <div class="chart-toggles">
+            <button id="btn-chart-month" class="chart-toggle-btn active" onclick="switchChart('month')">Visão
+              Mensal</button>
+            <button id="btn-chart-year" class="chart-toggle-btn" onclick="switchChart('year')">Evolução Anual</button>
+          </div>
           <div class="chart-container-wrapper"><canvas id="expensesChart"></canvas></div>
         </section>
 
@@ -576,11 +605,9 @@
               <option value="15">Ciclo Dia 15</option>
               <option value="30">Ciclo Dia 30</option>
             </select>
-
             <select id="filter-source" style="flex: 1">
               <option value="">Origem: Todas</option>
             </select>
-
             <input type="month" id="filter-month" style="flex: 1" />
           </div>
           <div style="max-height: 400px; overflow-y: auto; border-top: 1px solid #333;">
@@ -603,7 +630,7 @@
     </div>
     <button id="manage-cycles-btn"
       style="margin: 20px auto; display: block; background-color: #555; color: white; padding: 12px 20px; font-size: 0.95rem;">⚙️
-      Gerenciar / Encerrar Ciclos</button>
+      Concluir Ciclo / Virar Mês</button>
   </div>
 
   <div id="confirmation-modal" class="modal">
@@ -616,10 +643,12 @@
   </div>
   <div id="cycles-modal" class="modal">
     <div class="modal-content" style="background: var(--bg-card); color: white; max-width: 400px">
-      <h3>Gerenciar Ciclos</h3>
-      <div class="modal-buttons-vertical"><button onclick="closeCycle(15)" class="btn-cycle-15">Encerrar Ciclo Dia
-          15</button><button onclick="closeCycle(30)" class="btn-cycle-30">Encerrar Ciclo Dia 30</button></div><button
-        onclick="document.getElementById('cycles-modal').classList.remove('show')"
+      <h3>Concluir Ciclos</h3>
+      <p style="color:#aaa; font-size:0.9em;">Ao concluir um ciclo, os gastos abertos (até a data de hoje) serão
+        marcados como <b>Concluídos</b> e sairão do cálculo de "A Pagar". O histórico é mantido para gráficos.</p>
+      <div class="modal-buttons-vertical"><button onclick="closeCycle(15)" class="btn-cycle-15">✅ Concluir Ciclo
+          15</button><button onclick="closeCycle(30)" class="btn-cycle-30">✅ Concluir Ciclo 30 (Vira Mês)</button></div>
+      <button onclick="document.getElementById('cycles-modal').classList.remove('show')"
         style="margin-top: 15px; background: transparent; color: #aaa; width: 100%;">Fechar</button>
     </div>
   </div>

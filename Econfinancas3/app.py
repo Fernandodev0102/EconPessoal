@@ -4,11 +4,10 @@ import calendar
 from datetime import datetime, timedelta, date
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import extract
+from sqlalchemy import extract, func
 
 app = Flask(__name__)
 
-# CONFIGURAÇÃO
 basedir = os.path.abspath(os.path.dirname(__file__))
 instance_path = os.path.join(basedir, 'instance')
 if not os.path.exists(instance_path): os.makedirs(instance_path)
@@ -30,7 +29,6 @@ def calculate_cycle(expense, card=None):
     c_type = card.card_type if card else None
     c_due = card.due_day if card else None
     is_truly_credit = ('Crédito' in expense.payment_method) or (c_type == 'CREDIT')
-
     if is_truly_credit:
         if c_due and int(c_due) <= 15: cycle = 15
         else: cycle = 30
@@ -73,6 +71,8 @@ class Expense(db.Model):
     total_installments = db.Column(db.Integer, default=1)
     description_original = db.Column(db.String(100), nullable=True)
     group_id = db.Column(db.String(36), nullable=True)
+    # CAMPO NOVO: STATUS ('OPEN' ou 'CLOSED')
+    status = db.Column(db.String(20), default='OPEN')
 
 # ROTAS
 @app.route('/')
@@ -82,38 +82,25 @@ def index(): return render_template('index.html')
 def handle_expenses():
     if request.method == 'GET':
         query = Expense.query
-        
         cat = request.args.get('category')
         pay = request.args.get('payment_method')
         month_str = request.args.get('month') 
         cycle_filter = request.args.get('cycle')
-        
-        # NOVO: Filtro de Origem (Conta ou Cartão)
         source_filter = request.args.get('source') 
         
         if cat: query = query.filter_by(category=cat)
-        
         if pay:
             if pay == "Crédito": query = query.filter(Expense.payment_method.like('%Crédito%'))
             elif pay == "Vista": query = query.filter(Expense.payment_method.in_(['Pix', 'Débito', 'Dinheiro']))
             else: query = query.filter_by(payment_method=pay)
-        
         if month_str:
             try:
                 year, month = map(int, month_str.split('-'))
                 query = query.filter(extract('year', Expense.date) == year, extract('month', Expense.date) == month)
             except: pass
-            
-        # LÓGICA DO NOVO FILTRO DE ORIGEM
         if source_filter:
-            if source_filter.startswith('ACC-'):
-                # Filtra pela Conta Bancária (Débito/Pix dessa conta)
-                acc_id = int(source_filter.split('-')[1])
-                query = query.filter(Expense.bank_account_id == acc_id)
-            elif source_filter.startswith('CARD-'):
-                # Filtra pelo Cartão Específico (Crédito ou Débito vinculado)
-                card_id = int(source_filter.split('-')[1])
-                query = query.filter(Expense.card_id == card_id)
+            if source_filter.startswith('ACC-'): query = query.filter(Expense.bank_account_id == int(source_filter.split('-')[1]))
+            elif source_filter.startswith('CARD-'): query = query.filter(Expense.card_id == int(source_filter.split('-')[1]))
 
         expenses_raw = query.order_by(Expense.date.desc()).all()
         output = []
@@ -130,7 +117,8 @@ def handle_expenses():
                 'account': e.account_name, 'payment_method': e.payment_method,
                 'current_installment': e.current_installment, 'total_installments': e.total_installments,
                 'card_id': e.card_id, 'bank_account_id': e.bank_account_id, 
-                'card_due_day': c_due, 'computed_cycle': expense_cycle
+                'card_due_day': c_due, 'computed_cycle': expense_cycle,
+                'status': e.status # Envia status para o front
             })
         return jsonify(output)
 
@@ -159,7 +147,8 @@ def handle_expenses():
                     payment_method=data['payment_method'], bank_account_id=bank_id,
                     card_id=card_id, is_credit_card=data.get('is_credit_card', False),
                     total_installments=total_installments, current_installment=i+1,
-                    description_original=data['description'], group_id=group_id
+                    description_original=data['description'], group_id=group_id,
+                    status='OPEN' # Padrão
                 )
                 db.session.add(new_expense)
             db.session.commit()
@@ -189,19 +178,58 @@ def expense_ops(id):
             return jsonify({'message': 'Ok'})
         except Exception as err: return jsonify({'error': str(err)}), 500
 
+# --- NOVA LÓGICA DE ENCERRAR CICLO (NÃO APAGA, SÓ FECHA) ---
 @app.route('/api/cycles/close/<int:cycle_day>', methods=['POST'])
 def close_cycle_route(cycle_day):
     today = date.today()
-    all_expenses = Expense.query.filter(Expense.date <= today).all()
-    deleted_count = 0
+    # Busca gastos ABERTOS, deste ciclo, com data <= hoje
+    all_expenses = Expense.query.filter(Expense.status == 'OPEN', Expense.date <= today).all()
+    
+    updated_count = 0
     for e in all_expenses:
         card_obj = Card.query.get(e.card_id) if e.card_id else None
         if calculate_cycle(e, card_obj) == cycle_day:
-            db.session.delete(e); deleted_count += 1
+            e.status = 'CLOSED' # AQUI: Não deleta, muda status
+            updated_count += 1
+            
     db.session.commit()
-    return jsonify({'message': f'Ciclo {cycle_day} encerrado! {deleted_count} gastos arquivados.'})
+    return jsonify({'message': f'Ciclo {cycle_day} encerrado! {updated_count} gastos arquivados.'})
 
-# --- ROTAS DE CONTAS E AUXILIARES ---
+# --- NOVA ROTA PARA O GRÁFICO ANUAL ---
+# --- ROTA ATUALIZADA PARA GRÁFICO ANUAL (CRÉDITO vs DÉBITO) ---
+@app.route('/api/dashboard/annual', methods=['GET'])
+def annual_chart_data():
+    current_year = date.today().year
+    
+    # Busca todos os gastos do ano
+    all_expenses = Expense.query.filter(extract('year', Expense.date) == current_year).all()
+    
+    # Dicionários para guardar a soma mês a mês (1 a 12)
+    credit_totals = {m: 0.0 for m in range(1, 13)}
+    debit_totals = {m: 0.0 for m in range(1, 13)}
+    
+    for e in all_expenses:
+        # Pega o mês do gasto (1=Jan, 2=Fev...)
+        month = e.date.month
+        
+        # Determina se é Crédito ou Débito (Mesma lógica do resto do app)
+        card_obj = Card.query.get(e.card_id) if e.card_id else None
+        c_type = card_obj.card_type if card_obj else None
+        
+        is_credit = ('Crédito' in e.payment_method) or (c_type == 'CREDIT')
+        
+        if is_credit:
+            credit_totals[month] += e.amount
+        else:
+            debit_totals[month] += e.amount
+            
+    # Retorna dois arrays separados
+    return jsonify({
+        'credit': list(credit_totals.values()), # Ex: [500, 1200, 300...]
+        'debit': list(debit_totals.values())    # Ex: [800, 900, 850...]
+    })
+
+# --- ROTAS DE CONTAS E AUXILIARES (MANTIDAS) ---
 @app.route('/api/accounts', methods=['GET', 'POST'])
 def manage_accounts():
     if request.method == 'POST':
