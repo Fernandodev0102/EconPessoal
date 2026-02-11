@@ -371,23 +371,134 @@ function closeCycle(day) {
     }
 }
 
-function exportToExcel() {
-    if (currentExpensesData.length === 0) { alert("Sem dados para exportar."); return; }
-    let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
-    csvContent += "Data;Descrição;Categoria;Valor;Pagamento;Conta;Parcela;Status\n";
+async function exportToExcel() {
+    if (currentExpensesData.length === 0) { 
+        alert("Sem dados para exportar."); 
+        return; 
+    }
+
+    // 1. Configura o Excel (Workbook e Planilha)
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Relatório de Gastos');
+
+    // 2. Cabeçalhos
+    sheet.columns = [
+        { header: 'Data', key: 'date', width: 12 },
+        { header: 'Descrição', key: 'desc', width: 25 },
+        { header: 'Categoria', key: 'cat', width: 15 },
+        { header: 'Valor (R$)', key: 'val', width: 15 },
+        { header: 'Pagamento', key: 'pay', width: 15 },
+        { header: 'Conta/Cartão', key: 'acc', width: 20 },
+        { header: 'Parcela', key: 'inst', width: 10 },
+        { header: 'Status', key: 'status', width: 10 }
+    ];
+
+    // Estilo do Cabeçalho
+    sheet.getRow(1).font = { bold: true };
+    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
+
+    // 3. Adiciona os Dados
+    // Preparando dados para o gráfico simultaneamente
+    const totalsForChart = {};
+
     currentExpensesData.forEach(e => {
-        const val = e.amount.toString().replace('.', ',');
+        const valFormatted = parseFloat(e.amount);
         const inst = e.total_installments > 1 ? `${e.current_installment} de ${e.total_installments}` : '1x';
         const st = e.status === 'CLOSED' ? 'Pago' : 'Aberto';
-        csvContent += `${e.date};${e.description};${e.category};${val};${e.payment_method};${e.account};${inst};${st}\n`;
-    });
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `gastos_export_${new Date().toISOString().slice(0,10)}.csv`);
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-}
+        
+        sheet.addRow({
+            date: e.date.split('-').reverse().join('/'),
+            desc: e.description,
+            cat: e.category,
+            val: valFormatted,
+            pay: e.payment_method,
+            acc: e.account,
+            inst: inst,
+            status: st
+        });
 
+        // Somatória para o gráfico (agrupa por categoria)
+        if (!totalsForChart[e.category]) totalsForChart[e.category] = 0;
+        totalsForChart[e.category] += valFormatted;
+    });
+
+    // 4. GERAR O GRÁFICO MENSAL EM MEMÓRIA (Invisível)
+    // Criamos um canvas temporário só para gerar a imagem
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 800;
+    tempCanvas.height = 400;
+    // Escondemos ele da tela
+    tempCanvas.style.visibility = 'hidden'; 
+    tempCanvas.style.position = 'fixed';
+    tempCanvas.style.top = '0';
+    document.body.appendChild(tempCanvas);
+
+    const labels = Object.keys(totalsForChart);
+    const dataValues = Object.values(totalsForChart);
+
+    const tempChart = new Chart(tempCanvas.getContext('2d'), {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Gastos por Categoria',
+                data: dataValues,
+                backgroundColor: ["#00e676", "#ff5252", "#2979ff", "#ffea00", "#ff9100", "#d500f9", "#00b0ff", "#ff1744"],
+                borderWidth: 0,
+                borderRadius: 4,
+                barPercentage: 0.6,
+                maxBarThickness: 60
+            }]
+        },
+        options: {
+            responsive: false, // Tamanho fixo para a imagem sair nítida
+            animation: false,  // Sem animação para capturar instantaneamente
+            plugins: { 
+                legend: { display: false },
+                title: { 
+                    display: true, 
+                    text: 'Distribuição de Gastos por Categoria',
+                    color: '#333', // Título Escuro para fundo branco
+                    font: { size: 18 }
+                }
+            },
+            scales: {
+                x: { 
+                    ticks: { color: '#333', font: { size: 12, weight: 'bold' } }, // Texto Escuro
+                    grid: { display: false } 
+                },
+                y: { 
+                    beginAtZero: true,
+                    ticks: { color: '#333' }, // Texto Escuro
+                    grid: { color: '#ccc' }   // Grade cinza clara
+                }
+            }
+        }
+    });
+
+    // 5. Captura a Imagem
+    const imageBase64 = tempChart.toBase64Image();
+    
+    // Limpa o canvas temporário da memória
+    tempChart.destroy();
+    document.body.removeChild(tempCanvas);
+
+    // 6. Adiciona a Imagem ao Excel
+    const imageId = workbook.addImage({
+        base64: imageBase64,
+        extension: 'png',
+    });
+
+    sheet.addImage(imageId, {
+        tl: { col: 9, row: 1 }, 
+        ext: { width: 600, height: 350 }
+    });
+
+    // 7. Salva o Arquivo
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Relatorio_Gastos_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
 // --- FUNÇÕES DE GRÁFICO (MENSAL vs ANUAL) ---
 function switchChart(mode) {
     currentChartMode = mode;
