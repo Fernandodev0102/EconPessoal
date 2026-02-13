@@ -1,527 +1,568 @@
-/* Importação da fonte Inter do Google Fonts */
+/* ==========================================================================
+   IMPORTS E VARIÁVEIS GLOBAIS
+   ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
 
-/* Variáveis de Cores - Tema Escuro Padrão */
 :root {
-    --primary-bg: #121212; /* Fundo principal (quase preto) */
-    --secondary-bg: #1E1E1E; /* Fundo de componentes (cinza escuro) */
-    --text-color: #E0E0E0; /* Cor principal do texto (off-white) */
-    --light-text-color: #B0B0B0; /* Cor secundária do texto (cinza claro) */
-    --highlight-color: #FFFFFF; /* Branco para destaque e botões */
-    --highlight-dark: #CCCCCC; /* Cinza mais claro para hover */
-    --border-color: #444444; /* Cinza escuro para bordas */
-    --negative-color: #FF6B6B; /* Vermelho para valores negativos/exclusão */
-    --negative-dark: #FF4757; /* Vermelho mais escuro para hover */
-    --shadow-light: rgba(0, 0, 0, 0.25); /* Sombra suave */
-    --shadow-medium: rgba(0, 0, 0, 0.40); /* Sombra média */
-
-    /* Cores de feedback (mantidas para clareza) */
-    --success-color: #28a745;
-    --error-color: #dc3545;
-    --info-color: #17a2b8;
+    --bg-body: #121212;
+    --bg-card: #1e1e1e;
+    --text-primary: #e0e0e0;
+    --text-secondary: #a0a0a0;
+    --input-bg: #2d2d2d;
+    --input-border: #444;
+    --accent-green: #00e676;
+    --accent-red: #ff5252;
+    --cycle-15-bg: #1a3c40;
+    --cycle-15-text: #4dd0e1;
+    --cycle-30-bg: #3e2723;
+    --cycle-30-text: #ffb74d;
+    --btn-manage-bg: #444;
+    --btn-cancel-bg: #555;
 }
 
-/* Custom Scrollbar Styles (for Webkit browsers like Chrome, Edge, Safari) */
-::-webkit-scrollbar {
-    width: 8px;
-    height: 8px; /* For horizontal scrollbar */
-}
-
-::-webkit-scrollbar-track {
-    background: var(--primary-bg);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-    background: var(--light-text-color);
-    border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-color);
-}
-
-
-/* Reset básico e configurações globais */
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-}
+/* ==========================================================================
+   RESET E ESTRUTURA BÁSICA
+   ========================================================================== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-    font-family: 'Inter', sans-serif;
-    background-color: var(--primary-bg);
-    color: var(--text-color);
-    line-height: 1.6;
-    display: block; /* Changed to block for simpler centering of main-wrapper */
-    text-align: center; /* Center block-level children like main-wrapper */
-    min-height: 100vh;
-    padding: 20px;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    font-family: "Inter", sans-serif;
+    margin: 0; padding: 0;
+    width: 100vw;
+    overflow-x: hidden;
 }
 
-/* Novo wrapper principal para todo o conteúdo */
-.main-wrapper {
-    width: 100%;
-    max-width: 1200px; /* Same max-width as .container for alignment */
-    display: flex; /* Keep flex for internal column layout */
-    flex-direction: column; /* Stacks children vertically */
-    gap: 20px; /* Spacing between title, container, and reset button */
-    margin: 20px auto; /* Center the wrapper horizontally and add vertical margin */
-    padding: 0; /* Remove extra padding, as body has it */
-    text-align: left; /* Reset text-align for content inside main-wrapper */
-}
+h1, h2, h3 { color: var(--text-primary); }
+h1 { text-align: center; font-size: 1.4rem; margin: 10px 0; font-weight: 600; }
+label { color: var(--text-secondary); }
 
-h1, h2, h3 {
-    color: var(--highlight-color);
-    text-align: center; /* Ensure title is centered within its parent */
-    margin-bottom: 0; /* Removed margin-bottom to let main-wrapper's gap control spacing */
-}
+/* Scrollbar Personalizada */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #121212; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
 
-/* Container principal do aplicativo (agora um filho do main-wrapper) */
+/* ==========================================================================
+   LAYOUT (GRID E COLUNAS)
+   ========================================================================== */
+.main-wrapper { width: 100%; max-width: none !important; margin: 0; padding: 0; display: block; }
+
 .container {
-    background-color: var(--secondary-bg);
-    border-radius: 12px;
-    box-shadow: 0 8px 20px var(--shadow-medium);
-    width: 100%;
-    padding: 30px;
-    overflow: hidden; /* Ensures shadow elements don't cause overflow */
     display: grid;
-    gap: 20px;
-    grid-template-columns: 1fr; /* Default: single column for mobile */
-}
-
-@media (min-width: 768px) {
-    .container {
-        grid-template-columns: 1fr 2fr; /* Two columns for tablets and desktops */
-    }
-}
-
-/* Left and Right column styling */
-.left-column, .right-column {
-    display: flex;
-    flex-direction: column;
-    gap: 20px; /* Space between cards within each column */
-}
-
-/* Card styles */
-.card {
-    background-color: var(--secondary-bg);
-    border-radius: 12px;
-    padding: 25px;
-    box-shadow: 0 8px 16px var(--shadow-medium);
-    border: 1px solid var(--border-color);
-    display: flex;
-    flex-direction: column;
+    grid-template-columns: 370px 1fr;
     gap: 15px;
-    flex-grow: 1; /* Allow cards to grow and fill available space in columns */
-}
-
-/* Form inputs */
-.form-group {
-    margin-bottom: 15px;
-}
-
-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: var(--text-color);
-}
-
-input[type="text"],
-input[type="number"],
-input[type="date"],
-select,
-textarea {
     width: 100%;
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background-color: var(--primary-bg);
-    color: var(--text-color);
-    font-size: 1rem;
-    transition: border-color 0.3s ease, box-shadow 0.3s ease;
-    box-sizing: border-box; /* Ensures padding and border are included in the element's total width and height */
+    max-width: none;
+    margin: 0;
+    padding: 20px;
+    box-sizing: border-box;
+    /* Novo estilo para lista de gastos fixos */
+
+}
+.fixed-item-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    border-bottom: 1px solid #444;
 }
 
-input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="date"]:focus,
-select:focus,
-textarea:focus {
-    border-color: var(--highlight-color);
+@media (max-width: 900px) {
+    .container { grid-template-columns: 1fr; padding: 5px; }
+}
+
+.left-column, .right-column { display: flex; flex-direction: column; gap: 15px; }
+
+.card {
+    background: var(--bg-card);
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    border: 1px solid #333;
+}
+
+/* ==========================================================================
+   FORMULÁRIOS E INPUTS
+   ========================================================================== */
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 4px; font-weight: 600; font-size: 0.85em; }
+
+.form-group input, 
+.form-group select, 
+.filter-section select, 
+.filter-section input {
+    width: 100%;
+    padding: 8px;
+    background-color: var(--input-bg);
+    border: 1px solid var(--input-border);
+    color: white;
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-size: 0.95em;
+}
+
+/* Estilos Específicos de Inputs Dinâmicos */
+.input-source-container {
+    display: none; /* Controlado via JS */
+    border: 1px dashed #444;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.label-highlight-green { color: var(--accent-green) !important; }
+.label-highlight-red { color: var(--accent-red) !important; }
+
+/* Input de Edição de Saldo (criado pelo JS) */
+.input-edit-balance {
+    width: 100px;
+    padding: 2px 4px;
+    font-size: 1em;
+    background: #333;
+    color: #fff;
+    border: 1px solid var(--accent-green);
+    border-radius: 4px;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.25);
 }
 
-textarea {
-    resize: vertical;
-    min-height: 60px;
-}
-
-/* Botões */
+/* ==========================================================================
+   BOTÕES
+   ========================================================================== */
 button {
-    background-color: var(--highlight-color);
-    color: var(--secondary-bg);
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
     cursor: pointer;
-    font-size: 1rem;
+    border: none;
+    border-radius: 4px;
+    padding: 10px;
+    font-weight: bold;
+}
+
+/* Botões Principais */
+#save-expense-btn, #add-category-btn, #save-account-btn, #save-card-btn {
+    background-color: var(--accent-green);
+    color: black;
+}
+#save-expense-btn { width: 100%; margin-top: 10px; }
+#save-expense-btn:hover { opacity: 0.9; }
+#add-category-btn { width: 100%; }
+
+/* Botões de Ação Específicos */
+.btn-manage-banks {
+    width: 100%;
+    background-color: var(--btn-manage-bg);
+    color: white;
+    margin-bottom: 15px;
+    padding: 12px;
+}
+
+.btn-manage-cycles {
+    margin: 20px auto;
+    display: block;
+    background-color: var(--btn-cancel-bg);
+    color: white;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+}
+
+.btn-edit { background-color: #444; color: white; padding: 4px 8px; font-size: 0.9em; }
+.btn-delete { background-color: var(--accent-red); color: white; padding: 4px 8px; font-size: 0.9em; }
+
+.btn-export {
+    background-color: #2e7d32;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.9em;
+    padding: 6px 12px;
+}
+
+.btn-clear-filters { background: #444; color: white; }
+
+.btn-next-invoice {
+    background-color: #ff9100;
+    color: black;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.btn-sm-action { padding: 2px 6px; font-size: 0.75em; margin-left: 5px; }
+
+/* ==========================================================================
+   DASHBOARDS E CARDS (BANCOS E CICLOS) - DESIGN "RELAXADO"
+   ========================================================================== */
+
+/* Container geral */
+.banks-overview { margin-bottom: 20px; }
+.banks-loading { text-align: center; color: #888; padding: 20px; }
+
+/* O Bloco do Banco (Item Principal) */
+.bank-display-item {
+    background: #252525;
+    margin-bottom: 15px; /* Mais espaço entre bancos */
+    padding: 15px 20px;  /* Mais respiro interno */
+    border-radius: 12px;
+    border-left: 4px solid var(--accent-green);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* Cabeçalho do Banco (Nome e Saldo) */
+.bank-header-styled {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    padding-bottom: 10px;
+    margin-bottom: 5px;
+}
+
+.bank-name-large {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.bank-balance-large {
+    font-size: 1.2rem; /* Saldo maior */
+    color: var(--accent-green);
     font-weight: 600;
-    transition: background-color 0.3s ease, transform 0.2s ease;
-    box-shadow: 0 4px 8px var(--shadow-light);
 }
 
-button:hover {
-    background-color: var(--highlight-dark);
-    transform: translateY(-2px);
+.bank-balance-label {
+    font-size: 0.75rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-right: 5px;
 }
 
-button:active {
-    transform: translateY(0);
+/* O Bloco do Cartão de Crédito (Nested Box) */
+.cc-box {
+    background: #303030; /* Um tom mais claro que o fundo */
+    border-radius: 8px;
+    padding: 12px;
+    margin-top: 5px;
+    border: 1px solid #444;
 }
 
-.btn-group {
+/* Linha Superior do Cartão: Nome + Botão Pagar */
+.cc-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.cc-name {
+    font-weight: 600;
+    color: #e0e0e0;
+    font-size: 0.95rem;
+}
+
+.btn-pay-small {
+    background-color: var(--btn-manage-bg);
+    color: white;
+    border: 1px solid #555;
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    transition: background 0.2s;
+    cursor: pointer;
+}
+.btn-pay-small:hover { background-color: #666; }
+
+/* Grid de Informações do Cartão (Fatura vs Limite) */
+.cc-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Divide em 2 colunas iguais */
+    gap: 15px;
+}
+
+.cc-metric {
+    display: flex;
+    flex-direction: column;
+}
+
+.cc-label {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-bottom: 2px;
+}
+
+.cc-value-invoice {
+    color: var(--accent-red); /* Fatura em vermelho */
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.cc-value-limit {
+    color: var(--accent-green); /* Limite em verde */
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+/* Rodapé "Apenas Débito" */
+.debit-only-badge {
+    font-size: 0.8rem;
+    color: #666;
+    font-style: italic;
+    text-align: center;
+    margin-top: 5px;
+}
+
+/* Editáveis */
+.editable-balance, .editable-limit {
+    cursor: pointer;
+    border-bottom: 1px dashed #666;
+    transition: color 0.2s;
+}
+.editable-balance:hover, .editable-limit:hover {
+    color: white;
+    border-bottom-color: white;
+}
+
+/* Dashboard de Ciclos */
+.cycles-dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.cycle-card {
+    background: var(--bg-card);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    border: 1px solid #333;
+}
+
+.cycle-header {
+    padding: 10px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95em;
+    background-color: black;
+    color: white;
+    border-bottom: 2px solid white;
+}
+
+.cycle-body { padding: 12px; }
+.cycle-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+    font-size: 0.85em;
+    padding-bottom: 4px;
+    border-bottom: 1px dashed #333;
+    color: white;
+}
+.cycle-row.total-row {
+    border-top: 1px solid #555;
+    border-bottom: none;
+    padding-top: 8px;
+    font-weight: bold;
+    font-size: 20px;
+    color: var(--text-primary);
+}
+
+.text-highlight-red { color: var(--accent-red); }
+
+/* ==========================================================================
+   TABELAS E LISTAS
+   ========================================================================== */
+.expense-list-section { }
+.expense-list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.expense-list-actions { display: flex; gap: 10px; }
+.expense-list-scroll { max-height: 400px; overflow-y: auto; border-top: 1px solid #333; }
+
+.expense-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+.expense-table th {
+    text-align: left;
+    padding: 8px;
+    border-bottom: 2px solid #444;
+    color: black;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.8em;
+    background-color: #a0a0a0;
+}
+.expense-table td {
+    padding: 8px;
+    border-bottom: 1px solid #333;
+    color: var(--text-primary);
+    font-size: 0.9em;
+}
+.expense-row-actions { display: flex; gap: 5px; }
+
+/* Badges de Pagamento */
+.badge-pgto { padding: 2px 8px; border-radius: 4px; font-size: 0.8em; font-weight: 600; color: #fff; }
+.pgto-credito { background-color: #c62828; }
+.pgto-debito { background-color: #1565c0; }
+.pgto-pix { background-color: #2e7d32; }
+.pgto-outros { background-color: #424242; }
+
+/* Categorias */
+.category-management h3 { margin-top: 20px; }
+.category-list { list-style: none; padding: 0; margin: 0; }
+.category-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid #333;
+}
+.category-actions { display: flex; gap: 5px; }
+
+/* ==========================================================================
+   FILTROS E GRÁFICOS
+   ========================================================================== */
+.filter-section {
     display: flex;
     gap: 10px;
+    margin-bottom: 10px;
     flex-wrap: wrap;
-    justify-content: flex-start; /* Align buttons to start */
 }
+.filter-section select, .filter-section input { flex: 1; width: auto; }
 
-.btn-group button {
-    flex-grow: 1;
-    min-width: 120px;
+.chart-section { background: white; padding: 10px; }
+.chart-toggles { display: flex; justify-content: center; gap: 10px; margin-bottom: 10px; }
+.chart-toggle-btn {
+    background: #eee;
+    color: #333;
+    border: 1px solid #ccc;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.85em;
 }
-
-.btn-edit {
-    background-color: var(--light-text-color);
+.chart-toggle-btn.active {
+    background: var(--accent-green);
+    color: black;
+    font-weight: bold;
+    border-color: var(--accent-green);
 }
+.chart-container-wrapper { position: relative; height: 300px; width: 100%; }
 
-.btn-delete {
-    background-color: var(--negative-color);
+/* ==========================================================================
+   MODAIS
+   ========================================================================== */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    overflow: auto;
+    background-color: rgba(0, 0, 0, 0.8);
+    align-items: center;
+    justify-content: center;
 }
+.modal.show { display: flex; }
 
-.btn-edit:hover {
-    background-color: #8a8a8a;
-}
-
-.btn-delete:hover {
-    background-color: var(--negative-dark);
-}
-
-/* Tabela de Gastos */
-.expense-list-section {
-    overflow-x: auto; /* Allows horizontal scrolling for the table */
-}
-
-.expense-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 20px;
-    /* min-width: 600px; Removido para permitir que a tabela seja mais flexível */
-}
-
-.expense-table th,
-.expense-table td {
-    text-align: left;
-    padding: 12px;
-    border-bottom: 1px solid var(--border-color);
-    /* Removed white-space: nowrap; from here to allow text to wrap */
-}
-
-.expense-table th {
-    background-color: var(--highlight-color);
-    font-weight: 700;
-    color: var(--secondary-bg);
-    position: sticky;
-    top: 0;
-    z-index: 1; /* Ensure header stays on top of scrolling content */
-}
-
-.expense-table tbody tr:nth-child(even) {
-    background-color: rgba(255, 255, 255, 0.05);
-}
-
-.expense-table tbody tr:hover {
-    background-color: rgba(240, 240, 240, 0.1);
-}
-
-.expense-table td:last-child {
-    white-space: nowrap; /* Keep this for the last cell to prevent buttons from wrapping */
-    display: flex; /* Make buttons flex container */
-    gap: 5px; /* Add small gap between buttons */
-    flex-wrap: wrap; /* Allow buttons to wrap if space is very limited */
-    justify-content: flex-end; /* Align buttons to the right */
-}
-
-/* Mensagens de Feedback */
-#feedback-message {
-    background-color: var(--info-color);
-    color: white;
-    padding: 10px 20px;
+.modal-content {
+    background-color: var(--bg-card);
+    margin: auto;
+    padding: 20px;
+    border: 1px solid #444;
+    width: 90%;
+    max-width: 500px;
     border-radius: 8px;
-    margin-bottom: 20px;
-    text-align: center;
-    opacity: 0;
-    transition: opacity 0.5s ease-in-out;
-    visibility: hidden;
+    color: white;
+}
+
+.modal-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+.modal-buttons-vertical { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+.btn-cancel { background: #555; }
+
+.btn-cycle-15 { background-color: var(--cycle-15-bg); color: var(--cycle-15-text); border: 1px solid var(--cycle-15-text); }
+.btn-cycle-30 { background-color: var(--cycle-30-bg); color: var(--cycle-30-text); border: 1px solid var(--cycle-30-text); }
+
+/* Estilos internos do Modal de Contas */
+.modal-accounts-input-group {
+    background: #333;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 15px;
+    display: flex;
+    gap: 5px;
+}
+.modal-accounts-list { max-height: 400px; overflow-y: auto; }
+.modal-close-btn { margin-top: 15px; background: transparent; color: #aaa; width: 100%; }
+
+/* Itens internos do Modal de Contas */
+.bank-account-item {
+    background: #2d2d2d;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 10px;
+    border: 1px solid #444;
+}
+.bank-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.bank-name { font-weight: bold; color: var(--accent-green); font-size: 1.1em; }
+
+.card-add-container {
+    background: #222;
+    padding: 5px;
+    border-radius: 4px;
+    margin-bottom: 5px;
+}
+.card-add-row { display: flex; gap: 5px; margin-bottom: 5px; }
+.card-type-select { width: 30%; font-size: 0.8em; padding: 4px; background: #444; border: none; color: white; }
+.card-name-input { flex: 1; font-size: 0.8em; padding: 4px; background: #444; border: none; color: white; }
+.card-date-input { width: 50%; font-size: 0.8em; padding: 4px; background: #444; border: none; color: white; }
+.date-inputs-container { display: flex; gap: 5px; }
+.btn-add-card-confirm { width: 100%; margin-top: 5px; font-size: 0.8em; background: var(--accent-green); color: black; }
+
+.card-list-nested { margin-left: 15px; border-left: 2px solid #555; padding-left: 10px; }
+.card-item-nested {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    margin-bottom: 5px;
+    background: #333;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+/* ==========================================================================
+   FEEDBACK MESSAGE (O POPUP)
+   ========================================================================== */
+#feedback-message {
+    display: none; /* Controlado via JS */
     position: fixed;
     top: 20px;
     left: 50%;
     transform: translateX(-50%);
-    z-index: 1000;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-#feedback-message.show {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Seção de Categorias */
-.category-management {
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-}
-
-.category-list {
-    list-style: none;
-    padding: 0;
-    max-height: 250px;
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
+    z-index: 10000;
+    padding: 15px 25px;
     border-radius: 8px;
-    background-color: var(--primary-bg);
-}
-
-.category-list li {
-    padding: 12px 18px;
-    border-bottom: 1px solid var(--border-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-}
-
-.category-list li:last-child {
-    border-bottom: none;
-}
-
-.category-list li span {
-    flex-grow: 1;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.category-list li div {
-    display: flex;
-    gap: 8px;
-}
-
-/* Gráfico de Resumo */
-.chart-section {
-    margin-top: 20px;
-}
-
-.chart-summary {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    padding: 15px;
-    background-color: var(--primary-bg);
-    border-radius: 8px;
-    box-shadow: 0 2px 4px var(--shadow-light);
-}
-
-.chart-summary h3 {
-    margin: 0;
-    color: var(--highlight-color);
-}
-
-.chart-summary p {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--text-color);
-}
-
-.chart-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.chart-bar-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.chart-bar-label {
-    min-width: 100px;
-    font-weight: 600;
-    color: var(--text-color);
-}
-
-.chart-bar-container {
-    flex-grow: 1;
-    background-color: var(--border-color);
-    border-radius: 5px;
-    height: 25px;
-    overflow: hidden;
-    position: relative;
-}
-
-.chart-bar {
-    height: 100%;
-    background-color: var(--highlight-color);
-    width: 0%;
-    transition: width 0.8s ease-out;
-    border-radius: 5px;
-    position: absolute;
-    top: 0;
-    left: 0;
-}
-
-.chart-bar-overlay-text {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: white;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    white-space: nowrap;
-    z-index: 2;
-    padding: 0 5px;
-    box-sizing: border-box;
-    width: 100%;
+    font-weight: bold;
+    font-size: 1rem;
     text-align: center;
+    box-shadow: 0 6px 15px rgba(0,0,0,0.5);
+    min-width: 300px;
+    animation: slideDown 0.3s ease-out;
 }
 
-.chart-legend {
-    margin-top: 20px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 15px;
-    justify-content: center;
+@keyframes slideDown {
+    from { top: -50px; opacity: 0; }
+    to { top: 20px; opacity: 1; }
 }
 
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.9rem;
+/* Cores de Feedback */
+.feedback-success {
+    background-color: var(--accent-green) !important;
+    color: black !important;
+    border: 2px solid #00b359 !important;
 }
 
-.legend-color-box {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    border: 1px solid var(--border-color);
-}
-
-/* Modal de Confirmação */
-.modal {
-    display: none; /* Hidden by default */
-    position: fixed;
-    z-index: 1001;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-    background-color: rgba(0,0,0,0.7);
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-    pointer-events: none;
-}
-
-.modal.show {
-    opacity: 1;
-    pointer-events: auto;
-    display: flex; /* Ensure it becomes flex when shown */
-}
-
-.modal-content {
-    background-color: var(--secondary-bg);
-    margin: auto;
-    padding: 30px;
-    border: 1px solid var(--border-color);
-    border-radius: 12px;
-    width: 90%;
-    max-width: 400px;
-    text-align: center;
-    box-shadow: 0 10px 20px var(--shadow-medium);
-    transform: translateY(-20px);
-    transition: transform 0.3s ease-in-out;
-}
-
-.modal.show .modal-content {
-    transform: translateY(0);
-}
-
-.modal-content h3 {
-    color: var(--text-color);
-    margin-bottom: 20px;
-}
-
-.modal-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    margin-top: 25px;
-}
-
-.modal-buttons button {
-    flex: 1;
-    max-width: 150px;
-}
-
-.modal-buttons .btn-cancel {
-    background-color: var(--light-text-color);
-}
-
-.modal-buttons .btn-cancel:hover {
-    background-color: #5a6268;
-}
-
-/* Filtros */
-.filter-section {
-    display: grid;
-    grid-template-columns: 1fr; /* Default: single column for filters */
-    gap: 15px;
-    margin-bottom: 20px;
-    padding: 15px;
-    background-color: var(--primary-bg);
-    border-radius: 8px;
-    border: 1px solid var(--border-color);
-}
-
-@media (min-width: 768px) { /* Apply multi-column filter layout only when container is also multi-column */
-    .filter-section {
-        grid-template-columns: 1fr 1fr auto;
-    }
-}
-
-/* Botão de zerar dados */
-.reset-data-button {
-    background-color: var(--negative-color);
-    margin-top: 20px; /* Adiciona margem superior para separar do container */
-    width: 100%; /* Garante que ocupe a largura total do main-wrapper */
-    max-width: 1200px; /* Limita a largura máxima para alinhar com o container */
-    margin-left: auto; /* Centraliza o botão */
-    margin-right: auto; /* Centraliza o botão */
-    display: block; /* Ensure it's a block element for margin: auto to work */
-}
-.reset-data-button:hover {
-    background-color: var(--negative-dark);
+.feedback-error {
+    background-color: var(--accent-red) !important;
+    color: white !important;
+    border: 2px solid #d32f2f !important;
 }

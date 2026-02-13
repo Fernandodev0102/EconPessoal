@@ -1,127 +1,176 @@
+/* ==========================================================================
+   CONFIGURAÇÕES GERAIS E INICIALIZAÇÃO
+   ========================================================================== */
 const API_URL = "http://127.0.0.1:5000/api";
 let expensesChart = null;
 let currentAccountsData = []; 
 let currentExpensesData = [];
-let currentChartMode = 'month'; // 'month' ou 'year'
+let currentChartMode = 'month'; 
 
 document.addEventListener("DOMContentLoaded", () => {
+    // Define data inicial nos filtros e inputs
     const today = new Date();
     const monthStr = today.toISOString().slice(0, 7); 
     document.getElementById("filter-month").value = monthStr;
+    document.getElementById("pay-invoice-date").value = today.toISOString().split('T')[0];
 
-    loadExpenses();
+    // Carrega dados iniciais
     loadCategories();
-    loadAccountsAndCards();
-    updateIncome();
+    loadAccountsAndCards(); 
+    loadExpenses();
+    loadCyclesProjection(); 
     setupEventListeners();
 });
 
 function setupEventListeners() {
+    // Formulários Principais
     document.getElementById("expense-form").addEventListener("submit", addOrUpdateExpense);
     document.getElementById("add-category-btn").addEventListener("click", addCategory);
     
+    // Filtros
     document.getElementById("filter-category").addEventListener("change", loadExpenses);
     document.getElementById("filter-payment").addEventListener("change", loadExpenses);
     document.getElementById("filter-month").addEventListener("change", loadExpenses);
-    document.getElementById("filter-cycle").addEventListener("change", loadExpenses); 
     document.getElementById("filter-source").addEventListener("change", loadExpenses);
-    
+    document.getElementById("btn-next-invoice").addEventListener("click", filterNextInvoice);
     document.getElementById("clear-filters-btn").addEventListener("click", clearFilters);
     document.getElementById("export-btn").addEventListener("click", exportToExcel);
 
-    document.getElementById("manage-cycles-btn").addEventListener("click", () => openModal("cycles-modal"));
-    document.getElementById("open-accounts-modal-btn").addEventListener("click", () => openModal("accounts-modal"));
+    // Botões de Abertura de Modais
+    document.getElementById("open-accounts-modal-btn").addEventListener("click", () => {
+        renderAccountsModal(); // Garante renderização ao abrir
+        openModal("accounts-modal");
+    });
     document.getElementById("close-accounts-modal-btn").addEventListener("click", () => closeModal("accounts-modal"));
-    document.getElementById("modal-cancel-btn").addEventListener("click", () => closeModal("confirmation-modal"));
-    document.getElementById("save-account-btn").addEventListener("click", saveNewAccount);
+    
+    document.getElementById("open-fixed-modal-btn").addEventListener("click", () => {
+        openModal("fixed-modal");
+        loadFixedExpenses();
+    });
+    document.getElementById("add-fixed-btn").addEventListener("click", addFixedExpense);
 
+    // Ações de Modais
+    document.getElementById("save-account-btn").addEventListener("click", saveNewAccount);
+    document.getElementById("confirm-pay-invoice-btn").addEventListener("click", confirmPayInvoice);
+    document.getElementById("modal-cancel-btn").addEventListener("click", () => closeModal("confirmation-modal"));
+
+    // Lógica Visual: Alternar campos Cartão/Conta no formulário
     document.getElementById("expense-payment").addEventListener("change", function() {
         const method = this.value;
-        const installmentsGroup = document.getElementById("installments-group");
-        const cardContainer = document.getElementById("card-choice-container");
-        const accountContainer = document.getElementById("account-choice-container");
+        const instGroup = document.getElementById("installments-group");
+        const cardCont = document.getElementById("card-choice-container");
+        const accCont = document.getElementById("account-choice-container");
 
-        installmentsGroup.style.display = "none";
-        cardContainer.style.display = "none";
-        accountContainer.style.display = "none";
-        document.getElementById("expense-installments").value = "1";
+        // Reseta visibilidade
+        instGroup.style.display = "none";
+        cardCont.style.display = "none";
+        accCont.style.display = "none";
 
         if (method === "Credit_Card") {
-            cardContainer.style.display = "block";
-            installmentsGroup.style.display = "block";
+            cardCont.style.display = "block";
+            instGroup.style.display = "block";
         } else if (method === "Débito" || method === "Pix") {
-            accountContainer.style.display = "block";
+            accCont.style.display = "block";
         }
     });
 }
 
-// ... FUNÇÕES DE CONTA E CARTÃO (IGUAIS) ...
-async function loadAccountsAndCards() {
-    try {
-        const response = await fetch(`${API_URL}/accounts`);
-        currentAccountsData = await response.json();
-        renderAccountsModal();
-        renderFormDropdowns();
-        renderFilterOptions();
-    } catch (error) { console.error("Erro ao carregar contas:", error); }
+function showFeedback(message, type) {
+    const el = document.getElementById("feedback-message");
+    if (!el) return;
+    el.textContent = message;
+    el.className = ""; 
+    el.classList.add(type === 'error' ? 'feedback-error' : 'feedback-success');
+    el.style.display = "block";
+    setTimeout(() => { el.style.display = "none"; }, 4000);
 }
-function renderAccountsModal() {
-    const container = document.getElementById("accounts-list-display");
-    container.innerHTML = "";
-    if (currentAccountsData.length === 0) { container.innerHTML = '<p style="text-align:center; color:#666;">Nenhuma conta cadastrada.</p>'; return; }
-    currentAccountsData.forEach(account => {
-        const accDiv = document.createElement("div");
-        accDiv.className = "bank-account-item";
-        let cardsHtml = "";
-        account.cards.forEach(card => {
-            const isCredit = card.type === 'CREDIT';
-            const detail = isCredit ? `F:${card.closing_day}/V:${card.due_day}` : `Débito`;
-            const icon = isCredit ? `💳` : `🏧`;
-            cardsHtml += `<div class="card-item-nested"><span>${icon} ${card.name} <small style="color:#aaa;">(${detail})</small></span><button class="btn-delete btn-sm-action" onclick="deleteCard(${card.id})">🗑️</button></div>`;
-        });
-        accDiv.innerHTML = `<div class="bank-header"><span class="bank-name">🏛️ ${account.name}</span><button class="btn-delete btn-sm-action" onclick="deleteAccount(${account.id})">Excluir Conta</button></div><div style="background:#222; padding:5px; border-radius:4px; margin-bottom:5px;"><div style="display:flex; gap:5px; margin-bottom:5px;"><select id="new-card-type-${account.id}" style="width:30%; font-size:0.8em; padding:4px; background:#444; border:none; color:white;" onchange="toggleCardDates(${account.id})"><option value="CREDIT">Crédito</option><option value="DEBIT">Débito</option></select><input type="text" id="new-card-name-${account.id}" placeholder="Nome Cartão" style="flex:1; font-size: 0.8em; padding: 4px; background:#444; border:none; color:white;"></div><div id="date-inputs-${account.id}" class="date-inputs-container" style="display:flex; gap:5px;"><input type="number" id="new-card-closing-${account.id}" placeholder="Dia Fech." title="Dia Fechamento" style="width: 50%; font-size: 0.8em; padding: 4px; background:#444; border:none; color:white;"><input type="number" id="new-card-due-${account.id}" placeholder="Dia Venc." title="Dia Vencimento" style="width: 50%; font-size: 0.8em; padding: 4px; background:#444; border:none; color:white;"></div><button onclick="addCardToAccount(${account.id})" class="btn-edit" style="width:100%; margin-top:5px; font-size: 0.8em; background: var(--accent-green); color: black;">+ Adicionar Cartão</button></div><div class="card-list-nested">${cardsHtml.length > 0 ? cardsHtml : '<small style="color:#666;">Sem cartões cadastrados</small>'}</div>`;
-        container.appendChild(accDiv);
-    });
-}
-window.toggleCardDates = function(accountId) {
-    const type = document.getElementById(`new-card-type-${accountId}`).value;
-    const dateContainer = document.getElementById(`date-inputs-${accountId}`);
-    if (type === 'DEBIT') dateContainer.style.display = 'none';
-    else dateContainer.style.display = 'flex';
-}
-function renderFormDropdowns() {
-    const accSelect = document.getElementById("expense-account-source");
-    const cardSelect = document.getElementById("expense-card-source");
-    accSelect.innerHTML = '<option value="">-- Escolha --</option>';
-    cardSelect.innerHTML = '<option value="">-- Escolha o Cartão --</option>';
-    currentAccountsData.forEach(acc => {
-        const accOpt = document.createElement("option"); accOpt.value = `ACC-${acc.id}`; accOpt.textContent = `Conta: ${acc.name}`; accSelect.appendChild(accOpt);
-        const debitCards = acc.cards.filter(c => c.type === 'DEBIT');
-        if (debitCards.length > 0) { const groupD = document.createElement("optgroup"); groupD.label = `${acc.name} (Cartões)`; debitCards.forEach(c => { const opt = document.createElement("option"); opt.value = `CARD-${c.id}`; opt.textContent = `🏧 ${c.name}`; groupD.appendChild(opt); }); accSelect.appendChild(groupD); }
-        const creditCards = acc.cards.filter(c => c.type === 'CREDIT');
-        if (creditCards.length > 0) { const groupC = document.createElement("optgroup"); groupC.label = acc.name; creditCards.forEach(c => { const opt = document.createElement("option"); opt.value = c.id; opt.textContent = `💳 ${c.name} (Vence dia ${c.due_day})`; groupC.appendChild(opt); }); cardSelect.appendChild(groupC); }
-    });
-}
-function renderFilterOptions() {
-    const filterSelect = document.getElementById("filter-source");
-    filterSelect.innerHTML = '<option value="">Origem: Todas</option>';
-    currentAccountsData.forEach(acc => {
-        const group = document.createElement("optgroup"); group.label = acc.name;
-        const accOpt = document.createElement("option"); accOpt.value = `ACC-${acc.id}`; accOpt.textContent = `Conta (Débito/Pix)`; group.appendChild(accOpt);
-        acc.cards.forEach(card => { const cardOpt = document.createElement("option"); cardOpt.value = `CARD-${card.id}`; const type = card.type === 'CREDIT' ? 'Crédito' : 'Débito'; cardOpt.textContent = `${card.name} (${type})`; group.appendChild(cardOpt); });
-        filterSelect.appendChild(group);
-    });
-}
-async function saveNewAccount() { const nameInput = document.getElementById("new-account-name"); if(!nameInput.value) return; await fetch(`${API_URL}/accounts`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameInput.value }) }); nameInput.value = ""; loadAccountsAndCards(); }
-async function deleteAccount(id) { if(confirm("Excluir conta?")) { await fetch(`${API_URL}/accounts/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
-async function addCardToAccount(accountId) {
-    const name = document.getElementById(`new-card-name-${accountId}`).value; const type = document.getElementById(`new-card-type-${accountId}`).value; const close = document.getElementById(`new-card-closing-${accountId}`).value; const due = document.getElementById(`new-card-due-${accountId}`).value;
-    if(!name) { alert("Nome obrigatório"); return; } if(type === 'CREDIT' && (!close || !due)) { alert("Para crédito, preencha as datas"); return; }
-    await fetch(`${API_URL}/cards`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name, card_type: type, closing_day: close || null, due_day: due || null, bank_account_id: accountId }) }); loadAccountsAndCards();
-}
-async function deleteCard(id) { if(confirm("Excluir cartão?")) { await fetch(`${API_URL}/cards/${id}`, { method: "DELETE" }); loadAccountsAndCards(); } }
 
-/* CRUD GASTOS */
+/* ==========================================================================
+   PROJEÇÃO DE CICLOS E GASTOS FIXOS
+   ========================================================================== */
+async function loadCyclesProjection() {
+    try {
+        const res = await fetch(`${API_URL}/dashboard/cycles_projection`);
+        const data = await res.json();
+        
+        // Ciclo 15
+        document.getElementById("val-15-cards").textContent = formatCurrency(data.cycle_15.cards);
+        document.getElementById("val-15-fixed").textContent = formatCurrency(data.cycle_15.fixed);
+        document.getElementById("val-15-others").textContent = formatCurrency(data.cycle_15.others);
+        document.getElementById("val-15-total").textContent = formatCurrency(data.cycle_15.total);
+        
+        // Ciclo 30
+        document.getElementById("val-30-cards").textContent = formatCurrency(data.cycle_30.cards);
+        document.getElementById("val-30-fixed").textContent = formatCurrency(data.cycle_30.fixed);
+        document.getElementById("val-30-others").textContent = formatCurrency(data.cycle_30.others);
+        document.getElementById("val-30-total").textContent = formatCurrency(data.cycle_30.total);
+    } catch (e) { console.error("Erro na projeção:", e); }
+}
+
+async function loadFixedExpenses() {
+    const container = document.getElementById("fixed-list-display");
+    container.innerHTML = "Carregando...";
+    try {
+        const res = await fetch(`${API_URL}/fixed_expenses`);
+        const list = await res.json();
+        container.innerHTML = "";
+        
+        if (list.length === 0) {
+            container.innerHTML = "<p style='color:#666; text-align:center;'>Nenhum gasto fixo cadastrado.</p>";
+            return;
+        }
+
+        list.forEach(item => {
+            const div = document.createElement("div");
+            div.className = "bank-account-item";
+            div.style.display = "flex";
+            div.style.justifyContent = "space-between";
+            div.style.alignItems = "center";
+            div.innerHTML = `
+                <div>
+                    <span style="font-weight:bold; color:white;">${item.name}</span>
+                    <div style="font-size:0.85em; color:#aaa;">Vence dia: ${item.due_day} • Valor: R$ ${formatSimple(item.amount)}</div>
+                </div>
+                <button class="btn-delete" onclick="deleteFixedExpense(${item.id})">🗑️</button>
+            `;
+            container.appendChild(div);
+        });
+    } catch(e) { console.error(e); }
+}
+
+async function addFixedExpense() {
+    const name = document.getElementById("new-fixed-name").value;
+    const day = document.getElementById("new-fixed-day").value;
+    const amount = document.getElementById("new-fixed-amount").value;
+    
+    if(!name || !day || !amount) { alert("Preencha todos os campos!"); return; }
+    
+    await fetch(`${API_URL}/fixed_expenses`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name, due_day: day, amount })
+    });
+    
+    document.getElementById("new-fixed-name").value = "";
+    document.getElementById("new-fixed-amount").value = "";
+    document.getElementById("new-fixed-day").value = "";
+    
+    loadFixedExpenses();
+    loadCyclesProjection(); 
+    showFeedback("Gasto fixo adicionado!", "success");
+}
+
+async function deleteFixedExpense(id) {
+    if(confirm("Remover este gasto fixo?")) {
+        await fetch(`${API_URL}/fixed_expenses/${id}`, { method: 'DELETE' });
+        loadFixedExpenses();
+        loadCyclesProjection();
+    }
+}
+
+/* ==========================================================================
+   CRUD GASTOS
+   ========================================================================== */
 async function loadExpenses() {
     try {
         const query = buildQueryString();
@@ -129,401 +178,434 @@ async function loadExpenses() {
         const expenses = await response.json();
         currentExpensesData = expenses;
         renderTable(expenses);
-        updateDashboard(expenses);
-        
-        // Renderiza o gráfico correto
-        if (currentChartMode === 'month') renderChart(expenses);
+        if (currentChartMode === 'month') renderChart(expenses); 
         else renderAnnualChart();
-        
     } catch (e) { console.error(e); }
 }
-
-function buildQueryString() {
-    const c = document.getElementById("filter-category").value;
-    const p = document.getElementById("filter-payment").value;
-    const m = document.getElementById("filter-month").value;
-    const cy = document.getElementById("filter-cycle").value;
-    const src = document.getElementById("filter-source").value;
-    let q = "?";
-    if(c) q+=`category=${encodeURIComponent(c)}&`;
-    if(p) q+=`payment_method=${encodeURIComponent(p)}&`;
-    if(m) q+=`month=${m}&`;
-    if(cy) q+=`cycle=${cy}&`;
-    if(src) q+=`source=${src}&`;
-    return q;
-}
-
-async function addOrUpdateExpense(event) {
-    event.preventDefault();
-    const id = document.getElementById("expense-id").value;
-    const desc = document.getElementById("expense-description").value;
-    const val = parseFloat(document.getElementById("expense-value").value);
-    const date = document.getElementById("expense-date").value;
-    const cat = document.getElementById("expense-category").value;
-    const payMethod = document.getElementById("expense-payment").value;
-    const installments = parseInt(document.getElementById("expense-installments").value);
-    let cardId = null; let bankId = null; let accName = "Carteira"; let finalMethod = payMethod;
-
-    if (payMethod === "Credit_Card") {
-        cardId = document.getElementById("expense-card-source").value;
-        if(!cardId) { alert("Erro: Você deve selecionar um Cartão de Crédito!"); return; }
-        finalMethod = "Crédito"; 
-        const sel = document.getElementById("expense-card-source"); 
-        if(sel.selectedIndex > -1) accName = sel.options[sel.selectedIndex].text;
-    } 
-    else if (payMethod === "Débito" || payMethod === "Pix") {
-        const sourceVal = document.getElementById("expense-account-source").value;
-        if(sourceVal) {
-            const sel = document.getElementById("expense-account-source");
-            accName = sel.options[sel.selectedIndex].text + ` (${payMethod})`;
-            if(sourceVal.startsWith("ACC-")) bankId = sourceVal.split("-")[1];
-            else if (sourceVal.startsWith("CARD-")) cardId = sourceVal.split("-")[1];
-        }
-    }
-
-    const payload = {
-        description: desc, amount: val, date: date, category: cat,
-        payment_method: finalMethod, account_name: accName,
-        card_id: cardId, bank_account_id: bankId,
-        is_credit_card: (finalMethod === "Crédito"),
-        total_installments: installments
-    };
-
-    try {
-        const method = id ? "PUT" : "POST";
-        const url = id ? `${API_URL}/expenses/${id}` : `${API_URL}/expenses`;
-        const response = await fetch(url, { method: method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-        if(!response.ok) throw new Error("Erro ao salvar");
-        document.getElementById("expense-form").reset();
-        document.getElementById("expense-id").value = "";
-        document.getElementById("save-expense-btn").textContent = "Salvar Gasto";
-        document.getElementById("save-expense-btn").style.backgroundColor = "var(--accent-green)";
-        document.getElementById("card-choice-container").style.display = "none";
-        document.getElementById("account-choice-container").style.display = "none";
-        document.getElementById("installments-group").style.display = "none";
-        showFeedback("Salvo com sucesso!", "success");
-        loadExpenses();
-    } catch(e) { console.error(e); showFeedback("Erro ao salvar.", "error"); }
-}
-
-window.editExpense = function(id) {
-    const expense = currentExpensesData.find(e => e.id === id);
-    if(!expense) return;
-    document.getElementById("expense-id").value = expense.id;
-    document.getElementById("expense-description").value = expense.description;
-    document.getElementById("expense-value").value = expense.amount;
-    document.getElementById("expense-date").value = expense.date;
-    document.getElementById("expense-category").value = expense.category;
-    const paymentSelect = document.getElementById("expense-payment");
-    const installmentsSelect = document.getElementById("expense-installments");
-    
-    if (expense.payment_method === "Crédito") {
-        paymentSelect.value = "Credit_Card";
-        paymentSelect.dispatchEvent(new Event('change'));
-        setTimeout(() => { if(expense.card_id) document.getElementById("expense-card-source").value = expense.card_id; }, 100);
-    } else if (expense.bank_account_id || (expense.card_id && expense.payment_method !== "Crédito")) {
-        paymentSelect.value = expense.payment_method;
-        paymentSelect.dispatchEvent(new Event('change'));
-        setTimeout(() => { 
-            if(expense.bank_account_id) document.getElementById("expense-account-source").value = `ACC-${expense.bank_account_id}`;
-            else if (expense.card_id) document.getElementById("expense-account-source").value = `CARD-${expense.card_id}`;
-        }, 100);
-    } else {
-        paymentSelect.value = "Outros";
-        paymentSelect.dispatchEvent(new Event('change'));
-    }
-    installmentsSelect.value = expense.total_installments || 1;
-    const btn = document.getElementById("save-expense-btn");
-    btn.textContent = "Atualizar Gasto";
-    btn.style.backgroundColor = "#fbc02d";
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-window.deleteExpense = async function(id) { if(confirm("Excluir?")) { await fetch(`${API_URL}/expenses/${id}`, {method:"DELETE"}); loadExpenses(); } }
 
 function renderTable(expenses) {
     const tbody = document.getElementById("expense-table-body");
     tbody.innerHTML = "";
     expenses.forEach(e => {
         const row = document.createElement("tr");
-        const d = e.date.split("-");
-        let badge = "pgto-outros";
-        if(e.payment_method.includes("Crédito")) badge = "pgto-credito";
-        else if(e.payment_method === "Débito") badge = "pgto-debito";
-        else if(e.payment_method === "Pix") badge = "pgto-pix";
-
-        let desc = e.description;
+        const d = e.date.split("-"); // YYYY-MM-DD
+        
+        let statusIcon = e.status === 'CLOSED' ? '✅ ' : '';
+        let rowStyle = e.status === 'CLOSED' ? "opacity: 0.6;" : "";
+        let desc = statusIcon + e.description;
         if(e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
         
-        let accDisplay = e.account;
-        if(e.computed_cycle) accDisplay = `Ciclo ${e.computed_cycle}`; 
-        
-        // Mostra status visualmente
-        let rowStyle = "";
-        if (e.status === 'CLOSED') {
-            rowStyle = "opacity: 0.6; font-style: italic;";
-            desc += " ✅";
-        }
+        let cycleBadge = e.computed_cycle === 15 
+            ? '<span style="color:#4dd0e1; font-weight:bold; font-size:0.8em;">Ciclo 15</span>' 
+            : '<span style="color:#ffb74d; font-weight:bold; font-size:0.8em;">Ciclo 30</span>';
 
-        row.innerHTML = `<td>${d[2]}/${d[1]}/${d[0]}</td><td><div style="font-weight:600; ${rowStyle}">${desc}</div><div style="font-size:0.8em; color:#aaa;">${e.category}</div></td><td><div style="font-size:0.85em;">${accDisplay}</div></td><td style="font-weight:bold;">R$ ${e.amount.toFixed(2)}</td><td><span class="badge-pgto ${badge}">${e.payment_method}</span></td><td style="display:flex; gap:5px;"><button class="btn-edit" onclick="editExpense('${e.id}')">✏️</button><button class="btn-delete" onclick="deleteExpense('${e.id}')">🗑️</button></td>`;
+        row.innerHTML = `
+            <td>${d[2]}/${d[1]}</td>
+            <td><div style="font-weight:600; ${rowStyle}">${desc}</div><div style="font-size:0.8em; color:#aaa;">${e.category}</div></td>
+            <td style="font-weight:bold;">R$ ${e.amount.toFixed(2)}</td>
+            <td>${cycleBadge}</td>
+            <td>
+                <div class="expense-row-actions">
+                    <button class="btn-edit" onclick="editExpense('${e.id}')">✏️</button>
+                    <button class="btn-delete" onclick="deleteExpense('${e.id}')">🗑️</button>
+                </div>
+            </td>
+        `;
         tbody.appendChild(row);
     });
 }
 
-function updateDashboard(expenses) {
-    let c15=0, o15=0, c30=0, o30=0;
-    expenses.forEach(e => {
-        if (e.status === 'CLOSED') return; // NÃO SOMA SE JÁ ESTIVER FECHADO/PAGO
+// Prepara edição
+window.editExpense = function(id) {
+    const expense = currentExpensesData.find(e => e.id === id);
+    if(!expense) return;
 
-        const isCred = e.payment_method.includes("Crédito");
-        const cycle = e.computed_cycle; 
-        if(isCred) { if(cycle === 15) c15 += e.amount; else c30 += e.amount; } else { if(cycle === 15) o15 += e.amount; else o30 += e.amount; }
+    document.getElementById("expense-id").value = expense.id;
+    document.getElementById("expense-description").value = expense.description;
+    document.getElementById("expense-value").value = expense.amount;
+    document.getElementById("expense-date").value = expense.date;
+    document.getElementById("expense-category").value = expense.category;
+    document.getElementById("expense-installments").value = expense.total_installments || 1;
+    
+    // Seleciona método e dispara evento para mostrar campos corretos
+    const paymentSelect = document.getElementById("expense-payment");
+    if (expense.payment_method.includes("Crédito")) {
+        paymentSelect.value = "Credit_Card";
+    } else {
+        paymentSelect.value = (expense.payment_method === "Pix" || expense.payment_method === "Dinheiro") ? "Pix" : "Débito";
+    }
+    paymentSelect.dispatchEvent(new Event('change'));
+
+    // Preenche selects específicos após delay
+    setTimeout(() => {
+        if(expense.card_id) document.getElementById("expense-card-source").value = expense.card_id;
+        else if(expense.bank_account_id) document.getElementById("expense-account-source").value = `ACC-${expense.bank_account_id}`;
+    }, 50);
+
+    const btn = document.getElementById("save-expense-btn");
+    btn.textContent = "Atualizar Gasto";
+    btn.style.backgroundColor = "#fbc02d";
+    btn.style.color = "black";
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function addOrUpdateExpense(event) {
+    event.preventDefault();
+    const id = document.getElementById("expense-id").value;
+    const payMethod = document.getElementById("expense-payment").value;
+    
+    let cardId = null, bankId = null, accName = "Carteira", finalMethod = payMethod;
+
+    if (payMethod === "Credit_Card") {
+        cardId = document.getElementById("expense-card-source").value;
+        if(!cardId) { alert("Selecione o Cartão!"); return; }
+        finalMethod = "Crédito"; 
+        const sel = document.getElementById("expense-card-source");
+        accName = sel.options[sel.selectedIndex].text;
+    } else {
+        const sourceVal = document.getElementById("expense-account-source").value;
+        if(sourceVal) {
+            if(sourceVal.startsWith("ACC-")) bankId = sourceVal.split("-")[1];
+            else if(sourceVal.startsWith("CARD-")) cardId = sourceVal.split("-")[1];
+            const sel = document.getElementById("expense-account-source");
+            accName = sel.options[sel.selectedIndex].text;
+        }
+    }
+
+    const payload = { 
+        description: document.getElementById("expense-description").value,
+        amount: parseFloat(document.getElementById("expense-value").value),
+        date: document.getElementById("expense-date").value,
+        category: document.getElementById("expense-category").value,
+        payment_method: finalMethod, account_name: accName, 
+        card_id: cardId, bank_account_id: bankId,
+        total_installments: parseInt(document.getElementById("expense-installments").value)
+    };
+
+    const method = id ? "PUT" : "POST";
+    const url = id ? `${API_URL}/expenses/${id}` : `${API_URL}/expenses`;
+    
+    const response = await fetch(url, {
+        method: method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
     });
-    document.getElementById("card-total-15").textContent = formatCurrency(c15);
-    document.getElementById("other-total-15").textContent = formatCurrency(o15);
-    document.getElementById("total-cycle-15").textContent = formatCurrency(c15+o15);
-    document.getElementById("card-total-30").textContent = formatCurrency(c30);
-    document.getElementById("other-total-30").textContent = formatCurrency(o30);
-    document.getElementById("total-cycle-30").textContent = formatCurrency(c30+o30);
-    calculateBalances(c15+o15, c30+o30);
-}
 
-// UTILS
-async function loadCategories() {
-    try {
-        const response = await fetch(`${API_URL}/categories`);
-        const categories = await response.json();
-        const select = document.getElementById("expense-category");
-        const filterSelect = document.getElementById("filter-category");
-        const list = document.getElementById("category-list");
-        select.innerHTML = ""; filterSelect.innerHTML = '<option value="">Categoria: Todas</option>'; list.innerHTML = "";
-        categories.forEach((cat) => {
-            const option = document.createElement("option"); option.value = cat.name; option.textContent = cat.name; select.appendChild(option);
-            const filterOption = option.cloneNode(true); filterSelect.appendChild(filterOption);
-            const li = document.createElement("li");
-            li.innerHTML = `<span>${cat.name}</span><div style="display:flex; gap:5px;"><button class="btn-edit" onclick="editCategory('${cat.id}', '${cat.name}')" style="padding:2px 6px; font-size:0.7em;">✏️</button><button class="btn-delete" onclick="deleteCategory(${cat.id})" style="padding:2px 6px; font-size:0.7em;">X</button></div>`;
-            list.appendChild(li);
-        });
-    } catch (error) { console.error("Erro categorias:", error); }
-}
-async function addCategory() {
-    const nameInput = document.getElementById("new-category-name");
-    if (!nameInput.value) return;
-    await fetch(`${API_URL}/categories`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: nameInput.value }), });
-    nameInput.value = ""; loadCategories();
-}
-window.editCategory = async function(id, currentName) {
-    const newName = prompt("Novo nome:", currentName);
-    if (newName && newName !== currentName) { await fetch(`${API_URL}/categories/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) }); loadCategories(); }
-}
-window.deleteCategory = async function(id) { if (confirm("Excluir?")) { await fetch(`${API_URL}/categories/${id}`, { method: "DELETE" }); loadCategories(); } }
-function updateIncome() {
-    const income15 = parseCurrency(document.getElementById("income-15").value);
-    const income30 = parseCurrency(document.getElementById("income-30").value);
-    localStorage.setItem("income15", income15); localStorage.setItem("income30", income30);
-    loadExpenses(); 
-}
-function calculateBalances(total15, total30) {
-    let val15 = localStorage.getItem("income15") || 0; let val30 = localStorage.getItem("income30") || 0;
-    if(document.getElementById("income-15").value === "") document.getElementById("income-15").value = formatSimple(val15);
-    if(document.getElementById("income-30").value === "") document.getElementById("income-30").value = formatSimple(val30);
-    const balance15 = parseFloat(val15) - total15; const balance30 = parseFloat(val30) - total30;
-    const el15 = document.getElementById("balance-15"); const el30 = document.getElementById("balance-30");
-    el15.textContent = formatCurrency(balance15); el15.className = "balance-final " + (balance15 >= 0 ? "positive" : "negative");
-    el30.textContent = formatCurrency(balance30); el30.className = "balance-final " + (balance30 >= 0 ? "positive" : "negative");
-}
-function formatCurrency(value) { return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
-function formatSimple(value) { return parseFloat(value).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
-function parseCurrency(strValue) { if (!strValue) return 0; return parseFloat(strValue.replace(/\./g, "").replace(",", ".")); }
-function maskCurrency(input) { let value = input.value.replace(/\D/g, ""); value = (value / 100).toFixed(2) + ""; value = value.replace(".", ","); value = value.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1."); input.value = value; }
-function clearFilters() { 
-    const today = new Date();
-    document.getElementById("filter-month").value = today.toISOString().slice(0, 7);
-    document.getElementById("filter-category").value = ""; 
-    document.getElementById("filter-payment").value = ""; 
-    document.getElementById("filter-cycle").value = ""; 
-    document.getElementById("filter-source").value = "";
-    loadExpenses(); 
-}
-function showFeedback(message, type) { const el = document.getElementById("feedback-message"); el.textContent = message; el.className = type; el.style.display = "block"; setTimeout(() => { el.style.display = "none"; }, 3000); }
-function openModal(id) { document.getElementById(id).classList.add("show"); if(id === 'accounts-modal') loadAccountsAndCards(); }
-function closeModal(id) { document.getElementById(id).classList.remove("show"); }
-function showConfirmation(message, onConfirm) { const modal = document.getElementById("confirmation-modal"); document.getElementById("modal-message").textContent = message; modal.classList.add("show"); const oldBtn = document.getElementById("modal-confirm-btn"); const newBtn = oldBtn.cloneNode(true); oldBtn.parentNode.replaceChild(newBtn, oldBtn); newBtn.addEventListener("click", () => { onConfirm(); closeModal("confirmation-modal"); }); }
-
-// --- FUNÇÕES DE ENCERRAR CICLO (ATUALIZADAS) ---
-function closeCycle(day) {
-    const confirmation = confirm(`Deseja realmente CONCLUIR o CICLO ${day}?\nOs gastos abertos serão marcados como 'Concluídos' e sairão do saldo a pagar.`);
-    if (confirmation) {
-        fetch(`${API_URL}/cycles/close/${day}`, { method: 'POST' })
-            .then(res => res.json())
-            .then(data => {
-                showFeedback(data.message, "success");
-                
-                // Se for dia 30, avança o mês automaticamente
-                if (day === 30) {
-                    const currentMonth = new Date(document.getElementById("filter-month").value + "-01");
-                    currentMonth.setMonth(currentMonth.getMonth() + 1);
-                    document.getElementById("filter-month").value = currentMonth.toISOString().slice(0, 7);
-                }
-                
-                loadExpenses();
-            })
-            .catch(err => alert("Erro ao fechar ciclo"));
-    }
-}
-
-async function exportToExcel() {
-    if (currentExpensesData.length === 0) { 
-        alert("Sem dados para exportar."); 
-        return; 
-    }
-
-    // 1. Configura o Excel (Workbook e Planilha)
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Relatório de Gastos');
-
-    // 2. Cabeçalhos
-    sheet.columns = [
-        { header: 'Data', key: 'date', width: 12 },
-        { header: 'Descrição', key: 'desc', width: 25 },
-        { header: 'Categoria', key: 'cat', width: 15 },
-        { header: 'Valor (R$)', key: 'val', width: 15 },
-        { header: 'Pagamento', key: 'pay', width: 15 },
-        { header: 'Conta/Cartão', key: 'acc', width: 20 },
-        { header: 'Parcela', key: 'inst', width: 10 },
-        { header: 'Status', key: 'status', width: 10 }
-    ];
-
-    // Estilo do Cabeçalho
-    sheet.getRow(1).font = { bold: true };
-    sheet.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE0E0E0' } };
-
-    // 3. Adiciona os Dados
-    // Preparando dados para o gráfico simultaneamente
-    const totalsForChart = {};
-
-    currentExpensesData.forEach(e => {
-        const valFormatted = parseFloat(e.amount);
-        const inst = e.total_installments > 1 ? `${e.current_installment} de ${e.total_installments}` : '1x';
-        const st = e.status === 'CLOSED' ? 'Pago' : 'Aberto';
+    if(response.ok) {
+        document.getElementById("expense-form").reset();
+        document.getElementById("expense-id").value = "";
+        const btn = document.getElementById("save-expense-btn");
+        btn.textContent = "Salvar Gasto";
+        btn.style.backgroundColor = "var(--accent-green)";
+        btn.style.color = "black";
         
-        sheet.addRow({
-            date: e.date.split('-').reverse().join('/'),
-            desc: e.description,
-            cat: e.category,
-            val: valFormatted,
-            pay: e.payment_method,
-            acc: e.account,
-            inst: inst,
-            status: st
+        showFeedback("Salvo com sucesso!", "success");
+        loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
+    } else {
+        const err = await response.json();
+        showFeedback(err.error, "error");
+    }
+}
+
+async function deleteExpense(id) {
+    if(confirm("Excluir gasto?")) {
+        await fetch(`${API_URL}/expenses/${id}`, { method: "DELETE" });
+        loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
+    }
+}
+
+/* ==========================================================================
+   BANCOS E CARTÕES
+   ========================================================================== */
+async function loadAccountsAndCards() {
+    try {
+        const response = await fetch(`${API_URL}/accounts`);
+        if (!response.ok) throw new Error("Falha");
+        currentAccountsData = await response.json();
+        
+        renderBanksDashboard();
+        renderFormDropdowns();      
+        renderFilterOptions();      
+    } catch (error) { console.error("Erro contas:", error); }
+}
+
+function renderBanksDashboard() {
+    const container = document.getElementById("banks-dashboard-container");
+    container.innerHTML = "";
+    
+    if (currentAccountsData.length === 0) {
+        container.innerHTML = "<p class='banks-loading'>Nenhuma conta cadastrada.</p>"; return;
+    }
+
+    currentAccountsData.forEach(acc => {
+        const div = document.createElement("div");
+        div.className = "bank-display-item";
+        
+        let cardsHtml = "";
+        acc.cards.filter(c => c.type === 'CREDIT').forEach(card => {
+            cardsHtml += `
+                <div class="cc-box">
+                    <div class="cc-header-row">
+                        <span class="cc-name">💳 ${card.name}</span>
+                        <button class="btn-pay-small" onclick="openPayInvoiceModal(${card.id}, '${card.name}', ${card.open_invoice})">Pagar</button>
+                    </div>
+                    <div class="cc-info-grid">
+                        <div class="cc-metric"><span class="cc-label">Fatura</span><span class="cc-value-invoice">R$ ${formatSimple(card.open_invoice)}</span></div>
+                        <div class="cc-metric" style="text-align:right"><span class="cc-label">Limite</span><span class="cc-value-limit">R$ <span class="editable-limit" onclick="editBalance(this, 'card', ${card.id})">${formatSimple(card.limit)}</span></span></div>
+                    </div>
+                </div>`;
         });
-
-        // Somatória para o gráfico (agrupa por categoria)
-        if (!totalsForChart[e.category]) totalsForChart[e.category] = 0;
-        totalsForChart[e.category] += valFormatted;
+        
+        div.innerHTML = `
+            <div class="bank-header-styled">
+                <span class="bank-name-large">🏛️ ${acc.name}</span>
+                <span class="bank-balance-large">R$ <span class="editable-balance" onclick="editBalance(this, 'account', ${acc.id})">${formatSimple(acc.balance)}</span></span>
+            </div>
+            ${cardsHtml || '<div class="debit-only-badge">Apenas Débito</div>'}
+        `;
+        container.appendChild(div);
     });
+}
 
-    // 4. GERAR O GRÁFICO MENSAL EM MEMÓRIA (Invisível)
-    // Criamos um canvas temporário só para gerar a imagem
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = 800;
-    tempCanvas.height = 400;
-    // Escondemos ele da tela
-    tempCanvas.style.visibility = 'hidden'; 
-    tempCanvas.style.position = 'fixed';
-    tempCanvas.style.top = '0';
-    document.body.appendChild(tempCanvas);
+// Edição de Saldo ao Clicar
+function editBalance(spanElement, type, id) {
+    const currentText = spanElement.innerText;
+    const input = document.createElement("input");
+    input.type = "text"; input.value = currentText; input.className = "input-edit-balance";
+    
+    spanElement.parentNode.replaceChild(input, spanElement);
+    input.focus();
+    
+    input.addEventListener("blur", async () => {
+        const rawValue = parseFloat(input.value.replace(/[^0-9.,-]/g, "").replace(",", "."));
+        const endpoint = type === 'account' ? `/accounts/${id}/balance` : `/cards/${id}/limit`;
+        const payload = type === 'account' ? { balance: rawValue } : { limit: rawValue };
+        
+        await fetch(`${API_URL}${endpoint}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        loadAccountsAndCards(); 
+    });
+    input.addEventListener("keydown", (e) => { if(e.key === "Enter") input.blur(); });
+}
 
-    const labels = Object.keys(totalsForChart);
-    const dataValues = Object.values(totalsForChart);
+// Modal de Pagamento
+function openPayInvoiceModal(id, name, val) {
+    document.getElementById("pay-invoice-card-id").value = id;
+    document.getElementById("pay-invoice-card-name").value = name;
+    document.getElementById("pay-invoice-display-total").textContent = formatCurrency(val || 0);
+    document.getElementById("pay-invoice-amount").value = (val || 0).toFixed(2);
+    
+    const select = document.getElementById("pay-invoice-bank-source");
+    select.innerHTML = "";
+    currentAccountsData.forEach(acc => {
+        select.innerHTML += `<option value="${acc.id}">${acc.name} (R$ ${formatSimple(acc.balance)})</option>`;
+    });
+    openModal("pay-invoice-modal");
+}
 
-    const tempChart = new Chart(tempCanvas.getContext('2d'), {
-        type: "bar",
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Gastos por Categoria',
-                data: dataValues,
-                backgroundColor: ["#00e676", "#ff5252", "#2979ff", "#ffea00", "#ff9100", "#d500f9", "#00b0ff", "#ff1744"],
-                borderWidth: 0,
-                borderRadius: 4,
-                barPercentage: 0.6,
-                maxBarThickness: 60
-            }]
-        },
-        options: {
-            responsive: false, // Tamanho fixo para a imagem sair nítida
-            animation: false,  // Sem animação para capturar instantaneamente
-            plugins: { 
-                legend: { display: false },
-                title: { 
-                    display: true, 
-                    text: 'Distribuição de Gastos por Categoria',
-                    color: '#333', // Título Escuro para fundo branco
-                    font: { size: 18 }
-                }
-            },
-            scales: {
-                x: { 
-                    ticks: { color: '#333', font: { size: 12, weight: 'bold' } }, // Texto Escuro
-                    grid: { display: false } 
-                },
-                y: { 
-                    beginAtZero: true,
-                    ticks: { color: '#333' }, // Texto Escuro
-                    grid: { color: '#ccc' }   // Grade cinza clara
-                }
-            }
+async function confirmPayInvoice() {
+    const payload = {
+        card_id: document.getElementById("pay-invoice-card-id").value,
+        bank_account_id: document.getElementById("pay-invoice-bank-source").value,
+        amount: parseFloat(document.getElementById("pay-invoice-amount").value),
+        date: document.getElementById("pay-invoice-date").value
+    };
+    const res = await fetch(`${API_URL}/cards/pay_invoice`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+    });
+    if(res.ok) {
+        closeModal("pay-invoice-modal");
+        showFeedback("Fatura Paga!", "success");
+        loadAccountsAndCards(); loadExpenses(); loadCyclesProjection();
+    } else {
+        const err = await res.json(); showFeedback(err.error, "error");
+    }
+}
+
+/* ==========================================================================
+   CATEGORIAS
+   ========================================================================== */
+async function loadCategories() {
+    const res = await fetch(`${API_URL}/categories`);
+    const cats = await res.json();
+    const list = document.getElementById("category-list");
+    const select = document.getElementById("expense-category");
+    const filter = document.getElementById("filter-category");
+    
+    list.innerHTML = ""; 
+    select.innerHTML = "";
+    filter.innerHTML = '<option value="">Categoria: Todas</option>';
+    
+    cats.forEach(c => {
+        select.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+        filter.innerHTML += `<option value="${c.name}">${c.name}</option>`;
+        
+        const li = document.createElement("li");
+        li.innerHTML = `
+            <span>${c.name}</span>
+            <div class="category-actions">
+                <button class="btn-edit" onclick="editCategory(${c.id}, '${c.name}')" style="padding:2px 6px;">✏️</button>
+                <button class="btn-delete" onclick="deleteCategory(${c.id})" style="padding:2px 6px;">🗑️</button>
+            </div>`;
+        list.appendChild(li);
+    });
+}
+
+window.editCategory = async function(id, name) {
+    const newName = prompt("Novo nome:", name);
+    if(newName && newName !== name) {
+        await fetch(`${API_URL}/categories/${id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name: newName}) });
+        loadCategories(); loadExpenses();
+    }
+}
+
+async function deleteCategory(id) {
+    if(confirm("Excluir categoria?")) { await fetch(`${API_URL}/categories/${id}`, { method: 'DELETE' }); loadCategories(); }
+}
+
+async function addCategory() {
+    const name = document.getElementById("new-category-name").value;
+    if(name) { await fetch(`${API_URL}/categories`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name}) }); document.getElementById("new-category-name").value = ""; loadCategories(); }
+}
+
+/* ==========================================================================
+   GESTÃO DE CONTAS (MODAL)
+   ========================================================================== */
+function renderAccountsModal() {
+    const container = document.getElementById("accounts-list-display");
+    if(currentAccountsData.length === 0) { container.innerHTML = "<p>Nenhuma conta.</p>"; return; }
+    
+    container.innerHTML = currentAccountsData.map(acc => `
+        <div class="bank-account-item">
+            <div class="bank-header">
+                <span class="bank-name">🏛️ ${acc.name}</span>
+                <button class="btn-delete btn-sm-action" onclick="deleteAccount(${acc.id})">Excluir</button>
+            </div>
+            <div class="card-add-container">
+                <div class="card-add-row">
+                    <select id="new-card-type-${acc.id}" class="card-type-select" onchange="toggleCardDates(${acc.id})"><option value="CREDIT">Crédito</option><option value="DEBIT">Débito</option></select>
+                    <input type="text" id="new-card-name-${acc.id}" placeholder="Nome Cartão" class="card-name-input">
+                </div>
+                <div id="date-inputs-${acc.id}" class="date-inputs-container">
+                    <input type="number" id="new-card-closing-${acc.id}" placeholder="Fech." class="card-date-input">
+                    <input type="number" id="new-card-due-${acc.id}" placeholder="Venc." class="card-date-input">
+                </div>
+                <button onclick="addCardToAccount(${acc.id})" class="btn-add-card-confirm">Add Cartão</button>
+            </div>
+            <div class="card-list-nested">
+                ${acc.cards.map(c => `
+                    <div class="card-item-nested">
+                        <span>${c.type === 'CREDIT' ? '💳' : '🏧'} ${c.name}</span>
+                        <button class="btn-delete btn-sm-action" onclick="deleteCard(${c.id})">🗑️</button>
+                    </div>`).join("")}
+            </div>
+        </div>
+    `).join("");
+}
+
+window.toggleCardDates = function(accId) {
+    const type = document.getElementById(`new-card-type-${accId}`).value;
+    const dates = document.getElementById(`date-inputs-${accId}`);
+    dates.style.display = (type === 'CREDIT') ? 'flex' : 'none';
+}
+
+async function saveNewAccount() {
+    const name = document.getElementById("new-account-name").value;
+    if(name) { await fetch(`${API_URL}/accounts`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({name}) }); document.getElementById("new-account-name").value = ""; loadAccountsAndCards(); renderAccountsModal(); }
+}
+
+async function deleteAccount(id) {
+    if(confirm("Excluir conta?")) { await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE' }); loadAccountsAndCards(); renderAccountsModal(); }
+}
+
+async function addCardToAccount(accId) {
+    const payload = {
+        name: document.getElementById(`new-card-name-${accId}`).value,
+        card_type: document.getElementById(`new-card-type-${accId}`).value,
+        closing_day: document.getElementById(`new-card-closing-${accId}`).value,
+        due_day: document.getElementById(`new-card-due-${accId}`).value,
+        bank_account_id: accId
+    };
+    if(!payload.name) return;
+    await fetch(`${API_URL}/cards`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    loadAccountsAndCards(); renderAccountsModal();
+}
+
+async function deleteCard(id) {
+    if(confirm("Excluir cartão?")) { await fetch(`${API_URL}/cards/${id}`, { method: 'DELETE' }); loadAccountsAndCards(); renderAccountsModal(); }
+}
+
+function renderFormDropdowns() {
+    const accSel = document.getElementById("expense-account-source");
+    const cardSel = document.getElementById("expense-card-source");
+    accSel.innerHTML = '<option value="">-- Escolha --</option>';
+    cardSel.innerHTML = '<option value="">-- Escolha --</option>';
+    
+    currentAccountsData.forEach(acc => {
+        accSel.innerHTML += `<option value="ACC-${acc.id}">Conta: ${acc.name}</option>`;
+        const debits = acc.cards.filter(c => c.type === 'DEBIT');
+        if(debits.length) {
+             const grp = document.createElement("optgroup"); grp.label = acc.name;
+             debits.forEach(c => grp.innerHTML += `<option value="CARD-${c.id}">${c.name}</option>`);
+             accSel.appendChild(grp);
+        }
+        const credits = acc.cards.filter(c => c.type === 'CREDIT');
+        if(credits.length) {
+            const grp = document.createElement("optgroup"); grp.label = acc.name;
+            credits.forEach(c => grp.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+            cardSel.appendChild(grp);
         }
     });
-
-    // 5. Captura a Imagem
-    const imageBase64 = tempChart.toBase64Image();
-    
-    // Limpa o canvas temporário da memória
-    tempChart.destroy();
-    document.body.removeChild(tempCanvas);
-
-    // 6. Adiciona a Imagem ao Excel
-    const imageId = workbook.addImage({
-        base64: imageBase64,
-        extension: 'png',
-    });
-
-    sheet.addImage(imageId, {
-        tl: { col: 9, row: 1 }, 
-        ext: { width: 600, height: 350 }
-    });
-
-    // 7. Salva o Arquivo
-    const buffer = await workbook.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    saveAs(blob, `Relatorio_Gastos_${new Date().toISOString().slice(0,10)}.xlsx`);
-}
-// --- FUNÇÕES DE GRÁFICO (MENSAL vs ANUAL) ---
-function switchChart(mode) {
-    currentChartMode = mode;
-    document.getElementById('btn-chart-month').classList.toggle('active', mode === 'month');
-    document.getElementById('btn-chart-year').classList.toggle('active', mode === 'year');
-    
-    if (mode === 'month') renderChart(currentExpensesData);
-    else renderAnnualChart();
 }
 
-function renderChart(expenses) {
-    // Gráfico Mensal (Colunas Verticais Elegantes)
-    const ctx = document.getElementById("expensesChart").getContext("2d");
-    const totals = {};
+function renderFilterOptions() {
+    const sel = document.getElementById("filter-source");
+    sel.innerHTML = '<option value="">Origem: Todas</option>';
+    currentAccountsData.forEach(acc => {
+        const grp = document.createElement("optgroup"); grp.label = acc.name;
+        grp.innerHTML += `<option value="ACC-${acc.id}">Conta</option>`;
+        acc.cards.forEach(c => grp.innerHTML += `<option value="CARD-${c.id}">${c.name}</option>`);
+        sel.appendChild(grp);
+    });
+}
+
+function filterNextInvoice() {
+    const today = new Date().getDate();
+    let best = null, minDiff = 999;
+    currentAccountsData.forEach(acc => acc.cards.forEach(c => {
+        if(c.type === 'CREDIT' && c.due_day) {
+            let diff = c.due_day - today;
+            if(diff < 0) diff += 30;
+            if(diff < minDiff) { minDiff = diff; best = c; }
+        }
+    }));
+    if(best) { document.getElementById("filter-source").value = `CARD-${best.id}`; loadExpenses(); showFeedback(`Filtrando: ${best.name}`, "success"); }
+    else alert("Nenhum cartão encontrado.");
+}
+
+/* ==========================================================================
+   GRÁFICOS E UTILITÁRIOS
+   ========================================================================== */
+function switchChart(mode) { 
+    currentChartMode = mode; 
+    document.getElementById('btn-chart-month').classList.toggle('active', mode === 'month'); 
+    document.getElementById('btn-chart-year').classList.toggle('active', mode === 'year'); 
+    if (mode === 'month') renderChart(currentExpensesData); else renderAnnualChart(); 
+}
+
+function renderChart(expenses) { 
+    const ctx = document.getElementById("expensesChart").getContext("2d"); 
     
+    // Agrupa valores por categoria
+    const totals = {}; 
     expenses.forEach((e) => { 
-        // if (e.status === 'CLOSED') return; // Descomente para esconder pagos
-        if (!totals[e.category]) totals[e.category] = 0; 
-        totals[e.category] += e.amount; 
-    });
+        if (e.category === "Pagamento de Fatura") return;
+        totals[e.category] = (totals[e.category] || 0) + e.amount; 
+    }); 
     
     const labels = Object.keys(totals); 
-    const data = Object.values(totals);
+    const data = Object.values(totals); 
     
-    if (expensesChart) expensesChart.destroy();
+    if (expensesChart) expensesChart.destroy(); 
     
     expensesChart = new Chart(ctx, { 
         type: "bar", 
@@ -532,35 +614,27 @@ function renderChart(expenses) {
             datasets: [{ 
                 label: 'Gastos do Mês', 
                 data: data, 
-                backgroundColor: [
-                    "#00e676", "#ff5252", "#2979ff", "#ffea00", 
-                    "#ff9100", "#d500f9", "#00b0ff", "#ff1744"
-                ], 
-                borderWidth: 0,
-                borderRadius: 4,
-                
-                // --- O SEGREDO DO DESIGN ---
-                barPercentage: 0.5,    // Deixa as barras "respirarem" (ocupa só 60% da largura disponível da categoria)
-                maxBarThickness: 50    // Trava a largura máxima em 50px. Se tiver poucas colunas, elas não ficam gigantes.
+                // Paleta de cores variada (Estilo antigo)
+                backgroundColor: ["#00e676", "#ff5252", "#2979ff", "#ffea00", "#ff9100", "#d500f9", "#00b0ff", "#ff1744"], 
+                borderWidth: 0, 
+                borderRadius: 4, // Cantos arredondados
+                barPercentage: 0.6, // Barras mais finas e elegantes
+                maxBarThickness: 50 
             }] 
         }, 
         options: { 
             responsive: true, 
             maintainAspectRatio: false, 
             plugins: { 
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        label: function(context) {
-                            let label = context.dataset.label || '';
-                            if (label) label += ': ';
-                            if (context.parsed.y !== null) {
-                                label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
-                            }
-                            return label;
-                        }
-                    }
-                }
+                legend: { display: false }, 
+                tooltip: { 
+                    callbacks: { 
+                        // Formata o valor para R$ ao passar o mouse
+                        label: function(context) { 
+                            return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.raw); 
+                        } 
+                    } 
+                } 
             }, 
             scales: { 
                 x: { 
@@ -568,98 +642,101 @@ function renderChart(expenses) {
                     grid: { display: false } 
                 }, 
                 y: { 
-                    beginAtZero: true,
-                    ticks: { color: '#a0a0a0', font: { weight: 'bold' } }, 
-                    grid: { color: '#9a9999' } 
+                    beginAtZero: true, 
+                    ticks: { color: '#000000', font: { weight: 'bold' } }, 
+                    grid: { color: '#807e7e' } // Linhas de grade cinza suave
                 } 
             } 
         } 
-    });
+    }); 
 }
-
-
-
-
-function renderAnnualChart() {
-    // Gráfico Anual (Estilo "Beautiful" Restaurado: Curvas Suaves + Preenchimento)
+function renderAnnualChart() { 
     fetch(`${API_URL}/dashboard/annual`)
-        .then(res => res.json())
-        .then(data => {
-            const ctx = document.getElementById("expensesChart").getContext("2d");
-            if (expensesChart) expensesChart.destroy();
-            
-            const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-            
-            expensesChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: months,
-                    datasets: [
-                        {
-                            label: 'Crédito (Faturas)',
-                            data: data.credit,
-                            borderColor: '#ff5252', // Vermelho Neon
-                            backgroundColor: 'rgba(255, 82, 82, 0.15)', // Preenchimento leve vermelho
-                            borderWidth: 2,
-                            pointRadius: 3,         // Pontinhos nas datas
-                            pointBackgroundColor: '#ff5252',
-                            tension: 0.4,           // Curva bem suave (Estilo anterior)
-                            fill: true              // VOLTOU: Preenche a área embaixo da linha
-                        },
-                        {
-                            label: 'Débito / Pix',
-                            data: data.debit,
-                            borderColor: '#00e676', // Verde Neon
-                            backgroundColor: 'rgba(0, 230, 118, 0.15)', // Preenchimento leve verde
-                            borderWidth: 2,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#00e676',
-                            tension: 0.4,           // Curva bem suave
-                            fill: true              // VOLTOU: Preenche a área embaixo da linha
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'index',
-                        intersect: false,
-                    },
-                    plugins: {
-                        legend: { 
-                            display: true, 
-                            labels: { color: '#000000', font: { size: 11 } }
-                        },
-                        tooltip: {
-                            backgroundColor: 'rgba(30, 30, 30, 0.9)',
-                            titleColor: '#fff',
-                            bodyColor: '#fff',
-                            borderColor: '#444',
-                            borderWidth: 1,
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.dataset.label || '';
-                                    if (label) label += ': ';
-                                    if (context.parsed.y !== null) {
-                                        label += new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.parsed.y);
-                                    }
-                                    return label;
-                                }
+    .then(res => res.json())
+    .then(data => { 
+        const ctx = document.getElementById("expensesChart").getContext("2d"); 
+        if (expensesChart) expensesChart.destroy(); 
+        
+        const months = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']; 
+        
+        expensesChart = new Chart(ctx, { 
+            type: 'line', 
+            data: { 
+                labels: months, 
+                datasets: [ 
+                    { 
+                        label: 'Crédito', 
+                        data: data.credit, 
+                        borderColor: '#ff5252', // Vermelho
+                        backgroundColor: 'rgba(255, 82, 82, 0.15)', // Fundo suave
+                        borderWidth: 2, 
+                        pointRadius: 3, 
+                        tension: 0.4, // Curva suave
+                        fill: true 
+                    }, 
+                    { 
+                        label: 'Débito/Pix', 
+                        data: data.debit, 
+                        borderColor: '#00e676', // Verde
+                        backgroundColor: 'rgba(0, 230, 118, 0.15)', // Fundo suave
+                        borderWidth: 2, 
+                        pointRadius: 3, 
+                        tension: 0.4, 
+                        fill: true 
+                    } 
+                ] 
+            }, 
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                interaction: { mode: 'index', intersect: false }, 
+                plugins: { 
+                    legend: { display: true, labels: { color: '#000000' } },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.dataset.label + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(context.raw);
                             }
                         }
-                    },
-                    scales: {
-                        x: { 
-                            ticks: { color: '#000000' }, 
-                            grid: { display: false } // Limpa as linhas verticais
-                        },
-                        y: { 
-                            ticks: { color: '#000000', font: { size: 10 } }, 
-                            grid: { color: '#686868', borderDash: [5, 5] } // Linhas horizontais pontilhadas sutis
-                        }
                     }
-                }
-            });
-        });
+                }, 
+                scales: { 
+                    x: { ticks: { color: '#000000' } }, 
+                    y: { 
+                        ticks: { color: '#000000' }, 
+                        grid: { color: '#807e7e', borderDash: [5, 5] } // Grade pontilhada
+                    } 
+                } 
+            } 
+        }); 
+    }); 
+}
+async function exportToExcel() {
+    if(!currentExpensesData.length) { alert("Sem dados."); return; }
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Relatório');
+    ws.columns = [{header:'Data', key:'d'}, {header:'Desc', key:'desc'}, {header:'Valor', key:'v'}, {header:'Cat', key:'c'}, {header:'Tipo', key:'t'}];
+    currentExpensesData.forEach(e => {
+        if(e.category !== "Pagamento de Fatura") ws.addRow({d:e.date, desc:e.description, v:e.amount, c:e.category, t:e.payment_method});
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), "Relatorio_Financeiro.xlsx");
+}
+
+function formatCurrency(v) { return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function formatSimple(v) { return (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
+function openModal(id) { document.getElementById(id).classList.add("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+function buildQueryString() {
+    const m = document.getElementById("filter-month").value;
+    const c = document.getElementById("filter-category").value;
+    const p = document.getElementById("filter-payment").value;
+    const s = document.getElementById("filter-source").value;
+    return `?month=${m}&category=${c}&payment_method=${p}&source=${s}`;
+}
+function clearFilters() {
+    document.getElementById("filter-category").value = "";
+    document.getElementById("filter-payment").value = "";
+    document.getElementById("filter-source").value = "";
+    loadExpenses();
 }
