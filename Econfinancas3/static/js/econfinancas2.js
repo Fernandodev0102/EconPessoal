@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function setupEventListeners() {
     // Forms
-    document.getElementById("expense-form").addEventListener("submit", addOrUpdateExpense);
+    document.getElementById("expense-form").addEventListener("submit", addExpense);
     document.getElementById("add-category-btn").addEventListener("click", addCategory);
 
     // Filtros
@@ -63,12 +63,11 @@ function setupEventListeners() {
     });
     document.getElementById("confirm-transfer-btn").addEventListener("click", confirmTransfer);
 
-
     // Modais - Ações
     document.getElementById("save-account-btn").addEventListener("click", saveNewAccount);
     document.getElementById("confirm-pay-invoice-btn").addEventListener("click", confirmPayInvoice);
     
-    // Lógica Visual Inputs
+    // Lógica Visual Inputs (Selects dinâmicos)
     document.getElementById("expense-payment").addEventListener("change", function () {
         const method = this.value;
         const instGroup = document.getElementById("installments-group");
@@ -99,7 +98,7 @@ function showFeedback(message, type) {
 }
 
 /* ==========================================================================
-   PROJEÇÃO DE CICLOS E GASTOS FIXOS
+   PROJEÇÃO DE CICLOS
    ========================================================================== */
 async function loadCyclesProjection() {
     try {
@@ -120,9 +119,37 @@ async function loadCyclesProjection() {
     } catch (e) { console.error("Erro na projeção:", e); }
 }
 
+/* ==========================================================================
+   GASTOS FIXOS (COM LANÇAMENTO)
+   ========================================================================== */
+function populateFixedSourceSelect() {
+    const method = document.getElementById("new-fixed-method").value;
+    const sel = document.getElementById("new-fixed-source");
+    sel.innerHTML = "";
+    
+    if(method === 'Crédito') {
+        currentAccountsData.forEach(acc => {
+            acc.cards.filter(c => c.type === 'CREDIT').forEach(card => {
+                sel.innerHTML += `<option value="CARD-${card.id}">💳 ${card.name}</option>`;
+            });
+        });
+    } else {
+        currentAccountsData.forEach(acc => {
+            sel.innerHTML += `<option value="ACC-${acc.id}">🏛️ ${acc.name}</option>`;
+        });
+    }
+}
+
+// Global para ser acessível pelo HTML
+window.toggleFixedSourceInputs = function() {
+    populateFixedSourceSelect();
+}
+
 async function loadFixedExpenses() {
     const container = document.getElementById("fixed-list-display");
     container.innerHTML = "Carregando...";
+    populateFixedSourceSelect(); // Preenche o select de cadastro
+
     try {
         const res = await fetch(`${API_URL}/fixed_expenses`);
         const list = await res.json();
@@ -136,15 +163,27 @@ async function loadFixedExpenses() {
         list.forEach(item => {
             const div = document.createElement("div");
             div.className = "bank-account-item";
-            div.style.display = "flex";
-            div.style.justifyContent = "space-between";
             div.style.alignItems = "center";
-            div.innerHTML = `
-                <div>
-                    <span style="font-weight:bold; color:white;">${item.name}</span>
-                    <div style="font-size:0.85em; color:#aaa;">Vence dia: ${item.due_day} • Valor: R$ ${formatSimple(item.amount)}</div>
+            
+            // Botões: Lançar e Excluir
+            const buttons = `
+                <div style="display:flex; gap:5px;">
+                    <button onclick="launchFixedExpense(${item.id}, '${item.name}', ${item.amount})" style="background:#00e676; color:black; padding:5px 10px; font-weight:bold;" title="Lançar no mês atual">🚀 Lançar</button>
+                    <button class="btn-delete" onclick="deleteFixedExpense(${item.id})">🗑️</button>
                 </div>
-                <button class="btn-delete" onclick="deleteFixedExpense(${item.id})">🗑️</button>
+            `;
+
+            div.innerHTML = `
+                <div style="flex:1;">
+                    <div style="font-weight:bold; color:white; font-size:1.1em;">${item.name}</div>
+                    <div style="font-size:0.85em; color:#aaa; margin-top:2px;">
+                        Dia ${item.due_day} • Teto: R$ ${formatSimple(item.amount)}
+                    </div>
+                    <div style="font-size:0.8em; color:#4dd0e1;">
+                        ${item.source_desc}
+                    </div>
+                </div>
+                ${buttons}
             `;
             container.appendChild(div);
         });
@@ -155,39 +194,73 @@ async function addFixedExpense() {
     const name = document.getElementById("new-fixed-name").value;
     const day = document.getElementById("new-fixed-day").value;
     const amount = document.getElementById("new-fixed-amount").value;
-    if (!name || !day || !amount) { alert("Preencha todos os campos!"); return; }
+    const method = document.getElementById("new-fixed-method").value;
+    const sourceVal = document.getElementById("new-fixed-source").value;
+
+    if (!name || !day || !amount || !sourceVal) { alert("Preencha todos os campos!"); return; }
+
+    let cardId = null;
+    let bankId = null;
+
+    if(sourceVal.startsWith("CARD-")) cardId = sourceVal.split("-")[1];
+    else if(sourceVal.startsWith("ACC-")) bankId = sourceVal.split("-")[1];
+
+    const payload = {
+        name, amount, due_day: day, payment_method: method,
+        card_id: cardId, bank_account_id: bankId
+    };
 
     await fetch(`${API_URL}/fixed_expenses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, due_day: day, amount })
+        body: JSON.stringify(payload)
     });
 
     document.getElementById("new-fixed-name").value = "";
     document.getElementById("new-fixed-amount").value = "";
-    document.getElementById("new-fixed-day").value = "";
     loadFixedExpenses(); loadCyclesProjection();
-    showFeedback("Gasto fixo adicionado!", "success");
+    showFeedback("Gasto fixo salvo!", "success");
+}
+
+window.launchFixedExpense = async function(id, name, defaultAmount) {
+    const realValStr = prompt(`Lançar "${name}" agora?\n\nQual o valor exato da fatura este mês?`, defaultAmount);
+    if (realValStr === null) return;
+    
+    const realAmount = parseFloat(realValStr.replace(',', '.'));
+    if(isNaN(realAmount) || realAmount <= 0) { alert("Valor inválido"); return; }
+
+    try {
+        const res = await fetch(`${API_URL}/fixed_expenses/${id}/launch`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ amount: realAmount })
+        });
+
+        if(res.ok) {
+            showFeedback("Lançado no histórico!", "success");
+            loadExpenses(); loadAccountsAndCards();
+        } else {
+            const err = await res.json(); alert("Erro: " + err.error);
+        }
+    } catch(e) { console.error(e); }
 }
 
 async function deleteFixedExpense(id) {
-    if (confirm("Remover este gasto fixo?")) {
+    if (confirm("Remover este modelo de gasto fixo?")) {
         await fetch(`${API_URL}/fixed_expenses/${id}`, { method: 'DELETE' });
         loadFixedExpenses(); loadCyclesProjection();
     }
 }
 
 /* ==========================================================================
-   CRUD GASTOS E NOVA EXCLUSÃO
+   CRUD GASTOS
    ========================================================================== */
 async function loadExpenses() {
     try {
         const query = buildQueryString();
         const response = await fetch(`${API_URL}/expenses${query}`);
-        const expenses = await response.json();
-        currentExpensesData = expenses;
-        renderTable(expenses);
-        if (currentChartMode === 'month') renderChart(expenses);
+        currentExpensesData = await response.json();
+        renderTable(currentExpensesData);
+        if (currentChartMode === 'month') renderChart(currentExpensesData);
         else renderAnnualChart();
     } catch (e) { console.error(e); }
 }
@@ -198,24 +271,21 @@ function renderTable(expenses) {
     expenses.forEach(e => {
         const row = document.createElement("tr");
         const d = e.date.split("-");
-        
+
         let statusIcon = e.status === 'CLOSED' ? '✅ ' : '';
         let rowStyle = e.status === 'CLOSED' ? "opacity: 0.6;" : "";
         let desc = statusIcon + e.description;
         
-        // Verifica se é registro de sistema apenas para ajuste visual (badge cinza)
         const isSystemRecord = e.category === 'Transferência' || e.category === 'Pagamento de Fatura';
-        
-        if(e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
-        
+
+        if (e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
+
         let cycleBadge = e.computed_cycle === 15 
             ? '<span style="color:#4dd0e1; font-weight:bold; font-size:0.8em;">Ciclo 15</span>' 
             : '<span style="color:#ffb74d; font-weight:bold; font-size:0.8em;">Ciclo 30</span>';
 
         if (isSystemRecord) cycleBadge = '<span style="font-size:0.8em; color:#aaa;">-</span>';
 
-        // --- AQUI ESTÁ A MUDANÇA ---
-        // Removemos qualquer lógica de botão "Editar". Agora só existe "Excluir".
         let actionButtons = `
             <div class="expense-row-actions">
                 <button class="btn-delete" onclick="deleteExpense('${e.id}')">🗑️</button>
@@ -237,18 +307,15 @@ function renderTable(expenses) {
         tbody.appendChild(row);
     });
 }
-// LÓGICA DO MODAL DE EXCLUSÃO
+
+// LÓGICA DE EXCLUSÃO (Modal)
 window.deleteExpense = function (id) {
     const expense = currentExpensesData.find(e => e.id === id);
     if (!expense) return;
 
-    // Verifica se modal existe no DOM
     const modal = document.getElementById("delete-modal");
-    if (!modal) { alert("Erro: HTML do modal de exclusão não encontrado!"); return; }
-
     pendingDeleteId = id;
 
-    // Preenche info
     document.getElementById("del-desc").textContent = expense.description;
     document.getElementById("del-val").textContent = formatCurrency(expense.amount);
     const d = expense.date.split('-');
@@ -259,26 +326,22 @@ window.deleteExpense = function (id) {
     const btnSingle = document.getElementById("btn-delete-single");
 
     if (expense.total_installments > 1 || expense.group_id) {
-        // Parcelado
         msg.innerHTML = `Este item é a parcela <b style="color:white">${expense.current_installment} de ${expense.total_installments}</b>.`;
         btnAll.style.display = "block";
         btnSingle.textContent = "Apagar só este mês";
         btnSingle.style.backgroundColor = "#ff9800";
     } else {
-        // Único
         msg.textContent = "Tem certeza que deseja apagar?";
         btnAll.style.display = "none";
         btnSingle.textContent = "🗑️ Confirmar Exclusão";
         btnSingle.style.backgroundColor = "#d32f2f";
         btnSingle.style.color = "white";
     }
-
     modal.classList.add("show");
 }
 
 window.executeDelete = async function (scope) {
     if (!pendingDeleteId) return;
-
     try {
         const res = await fetch(`${API_URL}/expenses/${pendingDeleteId}?scope=${scope}`, { method: "DELETE" });
         if (res.ok) {
@@ -286,48 +349,16 @@ window.executeDelete = async function (scope) {
             showFeedback("Excluído com sucesso!", "success");
             loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
         } else {
-            const err = await res.json();
-            alert("Erro: " + err.error);
+            const err = await res.json(); alert("Erro: " + err.error);
         }
     } catch (e) { console.error(e); }
     finally { pendingDeleteId = null; }
 }
 
-// LÓGICA DE EDIÇÃO
-window.editExpense = function (id) {
-    const exp = currentExpensesData.find(e => e.id === id);
-    if (!exp) return;
-
-    document.getElementById("expense-id").value = exp.id;
-    document.getElementById("expense-description").value = exp.description;
-    document.getElementById("expense-value").value = exp.amount;
-    document.getElementById("expense-date").value = exp.date;
-    document.getElementById("expense-category").value = exp.category;
-    document.getElementById("expense-installments").value = exp.total_installments || 1;
-
-    const pSel = document.getElementById("expense-payment");
-    if (exp.payment_method.includes("Crédito")) {
-        pSel.value = "Credit_Card";
-    } else {
-        pSel.value = (exp.payment_method === "Pix" || exp.payment_method === "Dinheiro") ? "Pix" : "Débito";
-    }
-    pSel.dispatchEvent(new Event('change'));
-
-    setTimeout(() => {
-        if (exp.card_id) document.getElementById("expense-card-source").value = exp.card_id;
-        else if (exp.bank_account_id) document.getElementById("expense-account-source").value = `ACC-${exp.bank_account_id}`;
-    }, 50);
-
-    const btn = document.getElementById("save-expense-btn");
-    btn.textContent = "Atualizar Gasto"; btn.style.backgroundColor = "#fbc02d"; btn.style.color = "black";
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-async function addOrUpdateExpense(event) {
+async function addExpense(event) {
     event.preventDefault();
-    const id = document.getElementById("expense-id").value;
+    
     const payMethod = document.getElementById("expense-payment").value;
-
     let cardId = null, bankId = null, accName = "Carteira", finalMethod = payMethod;
 
     if (payMethod === "Credit_Card") {
@@ -356,21 +387,15 @@ async function addOrUpdateExpense(event) {
         total_installments: parseInt(document.getElementById("expense-installments").value)
     };
 
-    const method = id ? "PUT" : "POST";
-    const url = id ? `${API_URL}/expenses/${id}` : `${API_URL}/expenses`;
-
-    const response = await fetch(url, {
-        method: method,
+    const response = await fetch(`${API_URL}/expenses`, {
+        method: 'POST',
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
     });
 
     if (response.ok) {
         document.getElementById("expense-form").reset();
-        document.getElementById("expense-id").value = "";
-        const btn = document.getElementById("save-expense-btn");
-        btn.textContent = "Salvar Gasto"; btn.style.backgroundColor = "var(--accent-green)"; btn.style.color = "black";
-
+        document.getElementById("expense-id").value = ""; 
         showFeedback("Salvo com sucesso!", "success");
         loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
     } else {
@@ -384,9 +409,7 @@ async function addOrUpdateExpense(event) {
 async function loadAccountsAndCards() {
     try {
         const response = await fetch(`${API_URL}/accounts`);
-        if (!response.ok) throw new Error("Falha");
         currentAccountsData = await response.json();
-
         renderBanksDashboard(); renderAccountsModal(); renderFormDropdowns(); renderFilterOptions();
     } catch (error) { console.error("Erro contas:", error); }
 }
@@ -399,10 +422,7 @@ function renderBanksDashboard() {
     currentAccountsData.forEach(acc => {
         const div = document.createElement("div");
         div.className = "bank-display-item";
-
-        // Cor dinâmica
-        const stripColor = acc.color || '#00e676';
-        div.style.borderLeftColor = stripColor;
+        div.style.borderLeftColor = acc.color || '#00e676';
 
         let cardsHtml = "";
         acc.cards.filter(c => c.type === 'CREDIT').forEach(card => {
@@ -448,7 +468,6 @@ function editBalance(spanElement, type, id) {
         const rawValue = parseFloat(input.value.replace(/[^0-9.,-]/g, "").replace(",", "."));
         const endpoint = type === 'account' ? `/accounts/${id}/balance` : `/cards/${id}/limit`;
         const payload = type === 'account' ? { balance: rawValue } : { limit: rawValue };
-
         await fetch(`${API_URL}${endpoint}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         loadAccountsAndCards();
     });
@@ -465,22 +484,67 @@ function openPayInvoiceModal(id, name, val) {
     openModal("pay-invoice-modal");
 }
 
+/* ==========================================================================
+   CORREÇÃO DO BUG: CONFIRMAR PAGAMENTO FATURA
+   ========================================================================== */
 async function confirmPayInvoice() {
-    const payload = {
-        card_id: document.getElementById("pay-invoice-card-id").value,
-        bank_account_id: document.getElementById("pay-invoice-bank-source").value,
-        amount: parseFloat(document.getElementById("pay-invoice-amount").value),
-        date: document.getElementById("pay-invoice-date").value
-    };
-    const res = await fetch(`${API_URL}/cards/pay_invoice`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    const cardId = document.getElementById("pay-invoice-card-id").value;
+    const bankId = document.getElementById("pay-invoice-bank-source").value;
+    const amountVal = parseFloat(document.getElementById("pay-invoice-amount").value);
+    const dateVal = document.getElementById("pay-invoice-date").value;
+
+    // Validação básica
+    if (!amountVal || amountVal <= 0) {
+        alert("Por favor, insira um valor válido para pagamento.");
+        return;
+    }
+
+    // --- CORREÇÃO DE LÓGICA NO FRONTEND ---
+    // 1. Encontra o cartão nos dados atuais para comparar o valor da fatura
+    let currentCard = null;
+    currentAccountsData.forEach(acc => {
+        const found = acc.cards.find(c => c.id == cardId);
+        if(found) currentCard = found;
     });
-    if (res.ok) {
-        closeModal("pay-invoice-modal");
-        showFeedback("Fatura Paga!", "success");
-        loadAccountsAndCards(); loadExpenses(); loadCyclesProjection();
-    } else {
-        const err = await res.json(); showFeedback(err.error, "error");
+
+    const totalFatura = currentCard ? currentCard.open_invoice : amountVal;
+    
+    // 2. Prepara o envio para a API
+    const payload = {
+        card_id: cardId,
+        bank_account_id: bankId,
+        amount: amountVal,
+        date: dateVal
+    };
+
+    try {
+        const res = await fetch(`${API_URL}/cards/pay_invoice`, {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+            closeModal("pay-invoice-modal");
+            
+            // 3. Feedback Inteligente (Diferencia Parcial de Total)
+            if (amountVal < totalFatura - 0.05) { // margem de 5 centavos
+                const restante = totalFatura - amountVal;
+                showFeedback(`Pagamento Parcial! Restam: R$ ${restante.toFixed(2)}`, "success");
+            } else {
+                showFeedback("Fatura Quitada com Sucesso!", "success");
+            }
+
+            loadAccountsAndCards(); 
+            loadExpenses(); 
+            loadCyclesProjection();
+        } else {
+            const err = await res.json(); 
+            showFeedback(err.error, "error");
+        }
+    } catch(e) {
+        console.error(e);
+        showFeedback("Erro de conexão com o servidor.", "error");
     }
 }
 
@@ -547,44 +611,25 @@ async function confirmTransfer() {
     const amount = parseFloat(document.getElementById("transfer-amount").value);
     const date = document.getElementById("transfer-date").value;
 
-    if(sourceId === destId) {
-        alert("A conta de origem e destino não podem ser a mesma!");
-        return;
-    }
-    if(!amount || amount <= 0) {
-        alert("Digite um valor válido.");
-        return;
-    }
+    if(sourceId === destId) { alert("A conta de origem e destino não podem ser a mesma!"); return; }
+    if(!amount || amount <= 0) { alert("Digite um valor válido."); return; }
 
-    const payload = {
-        source_id: sourceId,
-        dest_id: destId,
-        amount: amount,
-        date: date
-    };
+    const payload = { source_id: sourceId, dest_id: destId, amount: amount, date: date };
 
     try {
         const res = await fetch(`${API_URL}/transfers`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
         });
 
         if(res.ok) {
             closeModal("transfer-modal");
             document.getElementById("transfer-amount").value = "";
             showFeedback("Transferência realizada!", "success");
-            loadAccountsAndCards();
-            loadExpenses(); 
-            loadCyclesProjection();
+            loadAccountsAndCards(); loadExpenses(); loadCyclesProjection();
         } else {
-            const err = await res.json();
-            showFeedback(err.error, "error");
+            const err = await res.json(); showFeedback(err.error, "error");
         }
-    } catch(e) {
-        console.error(e);
-        showFeedback("Erro de conexão", "error");
-    }
+    } catch(e) { console.error(e); showFeedback("Erro de conexão", "error"); }
 }
 
 /* ==========================================================================
@@ -642,7 +687,7 @@ function renderChart(expenses) {
     const ctx = document.getElementById("expensesChart").getContext("2d");
     const totals = {};
     expenses.forEach((e) => {
-        // Ignora Fatura e Transferência (GRÁFICO MENSAL)
+        // Ignora Fatura e Transferência no Gráfico Mensal
         if (e.category === "Pagamento de Fatura" || e.category === "Transferência") return;
         totals[e.category] = (totals[e.category] || 0) + e.amount;
     });

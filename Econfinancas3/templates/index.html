@@ -42,7 +42,12 @@
             <button
               id="open-transfer-modal-btn"
               class="btn-manage-banks"
-              style="flex: 1; background-color: var(--accent-green); color: black; font-weight: bold;"
+              style="
+                flex: 1;
+                background-color: var(--accent-green);
+                color: black;
+                font-weight: bold;
+              "
             >
               💸 Transferir
             </button>
@@ -318,33 +323,67 @@
     </div>
 
     <div id="fixed-modal" class="modal">
-      <div class="modal-content" style="max-width: 500px">
-        <h3>📅 Meus Gastos Fixos</h3>
+      <div class="modal-content" style="max-width: 600px">
+        <h3>📅 Gestão de Gastos Fixos</h3>
         <p style="color: #aaa; font-size: 0.9em; margin-bottom: 15px">
-          Cadastre aqui contas recorrentes (Aluguel, Internet). O sistema irá
-          projetá-las automaticamente no ciclo correto.
+          Cadastre seus compromissos mensais. Clique em "🚀" para lançar no mês
+          atual.
         </p>
 
-        <div class="modal-accounts-input-group">
-          <input
-            type="text"
-            id="new-fixed-name"
-            placeholder="Descrição (Ex: Internet)"
-            style="flex: 2"
-          />
-          <input
-            type="number"
-            id="new-fixed-day"
-            placeholder="Dia Venc."
-            style="width: 80px"
-          />
-          <input
-            type="number"
-            id="new-fixed-amount"
-            placeholder="R$"
-            style="width: 100px"
-          />
-          <button id="add-fixed-btn" style="width: auto">+</button>
+        <div
+          style="
+            background: #2d2d2d;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #444;
+          "
+        >
+          <div style="display: flex; gap: 5px; margin-bottom: 5px">
+            <input
+              type="text"
+              id="new-fixed-name"
+              placeholder="Nome (Ex: Academia)"
+              style="flex: 2"
+            />
+            <input
+              type="number"
+              id="new-fixed-day"
+              placeholder="Dia"
+              style="width: 60px"
+            />
+            <input
+              type="number"
+              id="new-fixed-amount"
+              placeholder="Valor Teto (R$)"
+              style="width: 100px"
+            />
+          </div>
+
+          <div style="display: flex; gap: 5px">
+            <select
+              id="new-fixed-method"
+              style="flex: 1"
+              onchange="toggleFixedSourceInputs()"
+            >
+              <option value="Débito">Débito Automático / Pix</option>
+              <option value="Crédito">Cartão de Crédito</option>
+            </select>
+
+            <select id="new-fixed-source" style="flex: 1"></select>
+
+            <button
+              id="add-fixed-btn"
+              style="
+                width: auto;
+                background: var(--accent-green);
+                color: black;
+                font-weight: bold;
+              "
+            >
+              Salvar
+            </button>
+          </div>
         </div>
 
         <div id="fixed-list-display" class="modal-accounts-list"></div>
