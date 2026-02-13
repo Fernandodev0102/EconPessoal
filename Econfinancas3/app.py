@@ -8,7 +8,7 @@ from sqlalchemy import extract, func
 
 app = Flask(__name__)
 
-# Configuração
+# Configuração do Banco de Dados
 basedir = os.path.abspath(os.path.dirname(__file__))
 instance_path = os.path.join(basedir, 'instance')
 if not os.path.exists(instance_path): os.makedirs(instance_path)
@@ -25,7 +25,7 @@ def add_months(source_date, months):
     day = min(source_date.day, calendar.monthrange(year, month)[1])
     return source_date.replace(year=year, month=month, day=day)
 
-# --- MODELOS ---
+# --- MODELOS (BD) ---
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
@@ -34,6 +34,7 @@ class BankAccount(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False)
     current_balance = db.Column(db.Float, default=0.0)
+    color = db.Column(db.String(20), default='#00e676') 
     cards = db.relationship('Card', backref='bank_account', lazy=True, cascade="all, delete-orphan")
 
 class Card(db.Model):
@@ -67,6 +68,8 @@ class Expense(db.Model):
     description_original = db.Column(db.String(100), nullable=True)
     group_id = db.Column(db.String(36), nullable=True)
     status = db.Column(db.String(20), default='OPEN')
+    # NOVO CAMPO: Para saber para onde o dinheiro foi numa transferência
+    transfer_dest_id = db.Column(db.Integer, nullable=True)
 
 # --- ROTAS PRINCIPAIS ---
 @app.route('/')
@@ -78,12 +81,11 @@ def reset_force():
     try:
         db.drop_all()
         db.create_all()
-        # Recria categorias padrão
         if not Category.query.first():
-            for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura"]: 
+            for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura", "Transferência"]: 
                 db.session.add(Category(name=n))
             db.session.commit()
-        return "<h1>Sistema Resetado com Sucesso!</h1><p>Todos os dados antigos foram apagados. <a href='/'>Voltar para o App</a></p>"
+        return "<h1>Sistema Resetado!</h1><p>Banco atualizado com suporte a estorno de transferências.</p>"
     except Exception as e:
         return f"Erro ao resetar: {str(e)}"
 
@@ -104,13 +106,14 @@ def delete_fixed(id):
     return jsonify({'msg':'ok'})
 
 # --- DASHBOARD DE CICLOS INTELIGENTE ---
+# --- DASHBOARD DE CICLOS INTELIGENTE (ATUALIZADO: Ignora Transferências) ---
 @app.route('/api/dashboard/cycles_projection', methods=['GET'])
 def cycles_projection():
     today = date.today()
     c15 = {'cards': 0.0, 'fixed': 0.0, 'others': 0.0, 'total': 0.0}
     c30 = {'cards': 0.0, 'fixed': 0.0, 'others': 0.0, 'total': 0.0}
     
-    # 1. Cartões (Soma apenas o que está ABERTO e VENCEU ATÉ HOJE)
+    # 1. Cartões
     cards = Card.query.filter_by(card_type='CREDIT').all()
     for card in cards:
         invoice_val = db.session.query(func.sum(Expense.amount))\
@@ -127,8 +130,14 @@ def cycles_projection():
         if 15 <= f.due_day <= 29: c15['fixed'] += f.amount
         else: c30['fixed'] += f.amount
 
-    # 3. Variáveis Abertos (Vencidos até hoje)
-    others = Expense.query.filter(Expense.status == 'OPEN', Expense.is_credit_card == False, Expense.date <= today).all()
+    # 3. Variáveis Abertos (Ignora Transferências agora)
+    others = Expense.query.filter(
+        Expense.status == 'OPEN', 
+        Expense.is_credit_card == False, 
+        Expense.category != 'Transferência', # <--- AQUI: Não soma transferência na projeção
+        Expense.date <= today
+    ).all()
+
     for o in others:
         day = o.date.day
         if 15 <= day <= 29: c15['others'] += o.amount
@@ -137,8 +146,8 @@ def cycles_projection():
     c15['total'] = c15['cards'] + c15['fixed'] + c15['others']
     c30['total'] = c30['cards'] + c30['fixed'] + c30['others']
     return jsonify({'cycle_15': c15, 'cycle_30': c30})
-
 # --- EXPENSES CRUD ---
+# --- EXPENSES CRUD (CORRIGIDO: Status Dinâmico) ---
 @app.route('/api/expenses', methods=['GET', 'POST'])
 def handle_expenses():
     if request.method == 'GET':
@@ -195,11 +204,14 @@ def handle_expenses():
             installment_value = total_amount / total_installments
             start_offset = 0 
             
+            # DEFINE O STATUS CORRETO
+            final_status = 'OPEN' # Padrão
+            
             if card_id:
+                # Se tem cartão de crédito, é OPEN (esperando fatura)
                 card = Card.query.get(card_id)
+                final_status = 'OPEN' 
                 if card:
-                    # Se comprar hoje (dia 20) e fechamento for dia 15:
-                    # Parcela 1 cai no mês que vem (Offset=1)
                     if card.card_type == 'CREDIT' and card.closing_day:
                         if base_date.day >= card.closing_day: start_offset = 1
                     
@@ -207,6 +219,8 @@ def handle_expenses():
                         return jsonify({'error': f'Limite insuficiente! Disponível: R$ {card.limit:.2f}'}), 400
                     card.limit -= total_amount
             elif bank_id:
+                # Se é conta bancária (Débito/Pix), é CLOSED (pago na hora)
+                final_status = 'CLOSED'
                 b = BankAccount.query.get(bank_id)
                 if b:
                     if b.current_balance < total_amount:
@@ -214,7 +228,6 @@ def handle_expenses():
                     b.current_balance -= total_amount
 
             for i in range(total_installments):
-                # Calcula data correta
                 this_date = add_months(base_date, i + start_offset)
                 new_expense = Expense(
                     description=data['description'], amount=installment_value, date=this_date,
@@ -223,7 +236,7 @@ def handle_expenses():
                     card_id=card_id, is_credit_card=data.get('is_credit_card', False),
                     total_installments=total_installments, current_installment=i+1,
                     description_original=data['description'], group_id=group_id,
-                    status='OPEN'
+                    status=final_status # <--- AQUI APLICAMOS O STATUS DECIDIDO ACIMA
                 )
                 db.session.add(new_expense)
             db.session.commit()
@@ -231,7 +244,7 @@ def handle_expenses():
         except Exception as e:
             db.session.rollback()
             return jsonify({'error': str(e)}), 500
-
+# --- ROTA DE DELETE E UPDATE (COM LÓGICA DE ESTORNO DE TRANSFERÊNCIA) ---
 @app.route('/api/expenses/<id>', methods=['DELETE', 'PUT'])
 def expense_ops(id):
     e = Expense.query.get(id)
@@ -239,15 +252,34 @@ def expense_ops(id):
     
     if request.method == 'DELETE':
         try:
-            if e.card_id:
-                c = Card.query.get(e.card_id)
-                if c and c.limit is not None: c.limit += e.amount
-            elif e.bank_account_id:
-                b = BankAccount.query.get(e.bank_account_id)
-                if b: b.current_balance += e.amount
-            db.session.delete(e)
+            scope = request.args.get('scope', 'single')
+            expenses_to_delete = []
+            
+            if scope == 'all' and e.group_id:
+                expenses_to_delete = Expense.query.filter_by(group_id=e.group_id).all()
+            else:
+                expenses_to_delete = [e]
+
+            for item in expenses_to_delete:
+                # 1. Devolução Padrão (Origem)
+                if item.card_id:
+                    c = Card.query.get(item.card_id)
+                    if c and c.limit is not None: c.limit += item.amount
+                elif item.bank_account_id:
+                    b = BankAccount.query.get(item.bank_account_id)
+                    if b: b.current_balance += item.amount
+                
+                # 2. LÓGICA DE ESTORNO DE TRANSFERÊNCIA (Destino)
+                # Se for transferência, temos que TIRAR o dinheiro de quem recebeu
+                if item.transfer_dest_id:
+                    dest_acc = BankAccount.query.get(item.transfer_dest_id)
+                    if dest_acc:
+                        dest_acc.current_balance -= item.amount
+
+                db.session.delete(item)
+            
             db.session.commit()
-            return jsonify({'message': 'Excluído'})
+            return jsonify({'message': 'Excluído(s) com sucesso'})
         except Exception as err:
             db.session.rollback(); return jsonify({'error': str(err)}), 500
         
@@ -255,17 +287,86 @@ def expense_ops(id):
         d = request.json
         try:
             new_amount = float(d['amount'])
-            # ... (Lógica de edição simplificada para brevidade, mantém a mesma) ...
+            
+            # Validações e ajustes básicos
+            if e.bank_account_id:
+                b = BankAccount.query.get(e.bank_account_id)
+                diff = new_amount - e.amount
+                if b and b.current_balance < diff:
+                     return jsonify({'error': 'Saldo insuficiente para atualizar'}), 400
+                b.current_balance -= diff
+
+            if e.card_id:
+                c = Card.query.get(e.card_id)
+                diff = new_amount - e.amount
+                if c and c.limit is not None:
+                    if c.limit < diff: return jsonify({'error': 'Limite insuficiente'}), 400
+                    c.limit -= diff
+
             e.description = d['description']
             e.amount = new_amount
             e.category = d['category']
-            # Para edição complexa (mudança de conta/valor), recomendamos deletar e criar de novo para garantir integridade
+            e.date = datetime.strptime(d['date'], '%Y-%m-%d').date()
+            e.payment_method = d['payment_method']
+            
             db.session.commit()
             return jsonify({'message': 'Ok'})
         except Exception as err: 
             db.session.rollback(); return jsonify({'error': str(err)}), 500
 
+# --- TRANSFERÊNCIA BANCÁRIA (BLINDADA) ---
+@app.route('/api/transfers', methods=['POST'])
+def transfer_balance():
+    try:
+        data = request.json
+        source_id = int(data['source_id'])
+        dest_id = int(data['dest_id'])
+        amount = float(data['amount'])
+        date_str = data['date']
+        
+        if source_id == dest_id: return jsonify({'error': 'Origem e Destino iguais'}), 400
+        if amount <= 0: return jsonify({'error': 'Valor inválido'}), 400
+
+        source_acc = BankAccount.query.get(source_id)
+        dest_acc = BankAccount.query.get(dest_id)
+
+        if not source_acc or not dest_acc: return jsonify({'error': 'Conta não encontrada'}), 404
+        if source_acc.current_balance < amount: return jsonify({'error': 'Saldo Insuficiente'}), 400
+
+        # Movimentação
+        source_acc.current_balance -= amount
+        dest_acc.current_balance += amount
+
+        cat_transfer = Category.query.filter_by(name="Transferência").first()
+        if not cat_transfer:
+            db.session.add(Category(name="Transferência"))
+            db.session.commit()
+
+        payment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        # Cria Log salvando o Destino para estorno futuro
+        log_expense = Expense(
+            description=f"Transf. para {dest_acc.name}",
+            amount=amount,
+            date=payment_date,
+            category="Transferência",
+            account_name=source_acc.name,
+            payment_method="Pix",
+            bank_account_id=source_acc.id,
+            card_id=None,
+            is_credit_card=False,
+            status='CLOSED',
+            transfer_dest_id=dest_id # <--- AQUI ESTÁ O SEGREDO
+        )
+        
+        db.session.add(log_expense)
+        db.session.commit()
+        return jsonify({'message': 'Sucesso!'})
+    except Exception as e:
+        db.session.rollback(); return jsonify({'error': str(e)}), 500
+
 # --- PAGAR FATURA ---
+# --- PAGAR FATURA (CORRIGIDO: Mantém vínculo com o cartão para o Ciclo Certo) ---
 @app.route('/api/cards/pay_invoice', methods=['POST'])
 def pay_invoice():
     try:
@@ -281,35 +382,56 @@ def pay_invoice():
         if not card or not bank: return jsonify({'error': 'Erro de dados'}), 404
         payment_date = datetime.strptime(date_str, '%Y-%m-%d').date()
 
-        # Calcula dívida REAL até a data
+        # Calcula dívida
         real_debt = db.session.query(func.sum(Expense.amount)).filter(Expense.card_id == card.id, Expense.status == 'OPEN', Expense.date <= payment_date).scalar() or 0.0
         real_debt = round(real_debt, 2)
         amount_to_pay = round(amount_to_pay, 2)
 
-        if amount_to_pay > (real_debt + 0.01):
-            return jsonify({'error': f'Pagamento Recusado! Máximo: R$ {real_debt:.2f}'}), 400
-        if bank.current_balance < amount_to_pay:
-            return jsonify({'error': 'Saldo insuficiente'}), 400
+        if amount_to_pay > (real_debt + 0.01): return jsonify({'error': f'Máximo: R$ {real_debt:.2f}'}), 400
+        if bank.current_balance < amount_to_pay: return jsonify({'error': 'Saldo insuficiente'}), 400
             
         bank.current_balance -= amount_to_pay
         if card.limit is not None: card.limit += amount_to_pay
 
-        # Baixa nos gastos
+        # Fecha as despesas antigas
         expenses_to_close = Expense.query.filter(Expense.card_id == card.id, Expense.status == 'OPEN', Expense.date <= payment_date).all()
         for exp in expenses_to_close: exp.status = 'CLOSED' 
             
-        invoice_expense = Expense(description=f"Fatura {card.name}", amount=amount_to_pay, date=payment_date, category="Pagamento de Fatura", account_name=f"{bank.name} (Pgto Fatura)", payment_method="Débito", bank_account_id=bank.id, card_id=None, is_credit_card=False, status='CLOSED')
+        # CRIA O REGISTRO DO PAGAMENTO
+        # Mudança aqui: card_id=card.id (Antes era None)
+        # Isso permite que a tabela saiba que esse pagamento pertence ao cartão X e use o dia de vencimento dele para calcular o ciclo.
+        invoice_expense = Expense(
+            description=f"Fatura {card.name}", 
+            amount=amount_to_pay, 
+            date=payment_date, 
+            category="Pagamento de Fatura", 
+            account_name=f"{bank.name} (Pgto Fatura)", 
+            payment_method="Débito", 
+            bank_account_id=bank.id, 
+            card_id=card.id, # <--- VÍNCULO RESTAURADO
+            is_credit_card=False, 
+            status='CLOSED'
+        )
         db.session.add(invoice_expense)
         db.session.commit()
         return jsonify({'message': 'Pago com sucesso!'})
     except Exception as e:
         db.session.rollback(); return jsonify({'error': str(e)}), 500
-
 # --- GESTÃO DE CONTAS ---
+@app.route('/api/accounts/<int:id>/color', methods=['PATCH'])
+def update_account_color(id):
+    acc = BankAccount.query.get(id)
+    if not acc: return jsonify({'error': 'Not found'}), 404
+    acc.color = request.json['color']
+    db.session.commit()
+    return jsonify({'message': 'Cor atualizada'})
+
 @app.route('/api/accounts', methods=['GET', 'POST'])
 def manage_accounts():
     if request.method == 'POST':
-        db.session.add(BankAccount(name=request.json['name'])); db.session.commit()
+        color = request.json.get('color', '#00e676')
+        db.session.add(BankAccount(name=request.json['name'], color=color))
+        db.session.commit()
         return jsonify({'msg': 'Ok'}), 201
     
     accounts = BankAccount.query.all()
@@ -319,14 +441,14 @@ def manage_accounts():
     for acc in accounts:
         cards_data = []
         for card in acc.cards:
-            # AQUI ESTÁ A CORREÇÃO CRUCIAL: Expense.date <= today
-            # Isso impede que parcelas futuras apareçam na fatura atual
             open_invoice = db.session.query(func.sum(Expense.amount)).filter(Expense.card_id == card.id, Expense.status == 'OPEN', Expense.date <= today).scalar() or 0.0
             cards_data.append({'id': card.id, 'name': card.name, 'type': card.card_type, 'limit': card.limit, 'closing_day': card.closing_day, 'due_day': card.due_day, 'open_invoice': open_invoice})
-        output.append({'id': acc.id, 'name': acc.name, 'balance': acc.current_balance, 'cards': cards_data})
+        
+        output.append({
+            'id': acc.id, 'name': acc.name, 'balance': acc.current_balance, 'color': acc.color, 'cards': cards_data
+        })
     return jsonify(output)
 
-# ... ROTAS BÁSICAS (Manter as mesmas do código anterior) ...
 @app.route('/api/accounts/<int:id>/balance', methods=['PATCH'])
 def update_account_balance(id):
     acc = BankAccount.query.get(id)
@@ -341,22 +463,28 @@ def update_card_limit(id):
     db.session.commit()
     return jsonify({'message': 'Limite atualizado'})
 
+# --- DADOS DO GRÁFICO ANUAL (ATUALIZADO: Ignora Transferências) ---
 @app.route('/api/dashboard/annual', methods=['GET'])
 def annual_chart_data():
     current_year = date.today().year
     all_expenses = Expense.query.filter(extract('year', Expense.date) == current_year).all()
     credit_totals = {m: 0.0 for m in range(1, 13)}
     debit_totals = {m: 0.0 for m in range(1, 13)}
+    
     for e in all_expenses:
         if e.category == "Pagamento de Fatura": continue 
+        if e.category == "Transferência": continue # <--- AQUI: Não mostra transferência no gráfico
+        
         month = e.date.month
         card_obj = Card.query.get(e.card_id) if e.card_id else None
         c_type = card_obj.card_type if card_obj else None
+        
         is_credit = ('Crédito' in e.payment_method) or (c_type == 'CREDIT')
+        
         if is_credit: credit_totals[month] += e.amount
         else: debit_totals[month] += e.amount
+        
     return jsonify({'credit': list(credit_totals.values()), 'debit': list(debit_totals.values())})
-
 @app.route('/api/accounts/<int:id>', methods=['DELETE'])
 def delete_account(id):
     db.session.delete(BankAccount.query.get(id)); db.session.commit()
@@ -399,3 +527,7 @@ with app.app_context():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
+
+pay_invoice
