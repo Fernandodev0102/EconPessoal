@@ -226,9 +226,13 @@ def launch_fixed(id):
 @app.route('/api/dashboard/cycles_projection', methods=['GET'])
 def cycles_projection():
     today = date.today()
+    
+    # Estrutura de totais
     c15 = {'cards': 0.0, 'fixed': 0.0, 'others': 0.0, 'total': 0.0}
     c30 = {'cards': 0.0, 'fixed': 0.0, 'others': 0.0, 'total': 0.0}
     
+    # 1. Cartões de Crédito (Soma fatura aberta)
+    # A lógica de cartão já está perfeita: soma o que foi gasto no cartão.
     cards = Card.query.filter_by(card_type='CREDIT').all()
     for card in cards:
         invoice_val, _ = calculate_open_invoice_window(card, today)
@@ -237,21 +241,54 @@ def cycles_projection():
             if 15 <= day <= 29: c15['cards'] += invoice_val
             else: c30['cards'] += invoice_val
 
+    # 2. Gastos Fixos (COM VERIFICAÇÃO DE LANÇAMENTO)
+    # Aqui está o segredo: Só somamos o Fixo se ele NÃO foi lançado ainda.
+    # Se já foi lançado, ele vai aparecer na soma de "Cartões" (se foi crédito) ou "Outros" (se foi débito).
+    
     fixeds = FixedExpense.query.all()
-    for f in fixeds:
-        if 15 <= f.due_day <= 29: c15['fixed'] += f.amount
-        else: c30['fixed'] += f.amount
+    
+    # Busca todas as despesas deste mês para comparar
+    current_month_expenses = Expense.query.filter(
+        extract('year', Expense.date) == today.year,
+        extract('month', Expense.date) == today.month
+    ).all()
+    
+    # Cria uma lista de nomes de despesas que já existem este mês
+    # Ex: ["Aluguel (Fixo)", "Internet (Fixo)"]
+    launched_names = [e.description for e in current_month_expenses]
 
-    others = Expense.query.filter(Expense.status == 'OPEN', Expense.card_id == None, Expense.category != 'Transferência', Expense.date <= today).all()
+    for f in fixeds:
+        # Verifica se já existe uma despesa com o padrão de nome do lançamento
+        # O padrão que definimos no 'launch_fixed' é: f"{f.name} (Fixo)"
+        expected_name = f"{f.name} (Fixo)"
+        
+        is_launched = expected_name in launched_names
+        
+        # Se NÃO foi lançado, soma aqui como previsão.
+        # Se JÁ foi lançado, ignoramos aqui (pois o valor real já está sendo somado em 'cards' ou 'others').
+        if not is_launched:
+            if 15 <= f.due_day <= 29: c15['fixed'] += f.amount
+            else: c30['fixed'] += f.amount
+
+    # 3. Outros (Gastos Variáveis + Fixos já lançados em Débito)
+    # Filtra tudo que é OPEN, não é cartão e não é transferência.
+    others = Expense.query.filter(
+        Expense.status == 'OPEN', 
+        Expense.card_id == None, 
+        Expense.category != 'Transferência',
+        Expense.date <= today
+    ).all()
+
     for o in others:
         day = o.date.day
         if 15 <= day <= 29: c15['others'] += o.amount
         else: c30['others'] += o.amount
 
+    # Totais Finais
     c15['total'] = c15['cards'] + c15['fixed'] + c15['others']
     c30['total'] = c30['cards'] + c30['fixed'] + c30['others']
+    
     return jsonify({'cycle_15': c15, 'cycle_30': c30})
-
 # --- EXPENSES CRUD ---
 @app.route('/api/expenses', methods=['GET', 'POST'])
 def handle_expenses():
@@ -465,3 +502,8 @@ with app.app_context():
         db.session.commit()
 
 if __name__ == '__main__': app.run(debug=True)
+
+
+
+
+cycles_projection

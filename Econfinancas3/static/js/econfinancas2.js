@@ -237,7 +237,9 @@ window.launchFixedExpense = async function(id, name, defaultAmount) {
 
         if(res.ok) {
             showFeedback("Lançado no histórico!", "success");
-            loadExpenses(); loadAccountsAndCards();
+            loadExpenses(); 
+            loadAccountsAndCards();
+            loadCyclesProjection();
         } else {
             const err = await res.json(); alert("Erro: " + err.error);
         }
@@ -846,3 +848,5 @@ function filterNextInvoice() {
     if (best) { document.getElementById("filter-source").value = `CARD-${best.id}`; loadExpenses(); showFeedback(`Filtrando: ${best.name}`, "success"); }
     else { alert("Nenhum cartão encontrado."); }
 }
+
+
