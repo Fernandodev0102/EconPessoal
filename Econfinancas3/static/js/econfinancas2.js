@@ -681,35 +681,65 @@ function switchChart(mode) {
     currentChartMode = mode;
     document.getElementById('btn-chart-month').className = mode === 'month' ? 'chart-toggle-btn active' : 'chart-toggle-btn';
     document.getElementById('btn-chart-year').className = mode === 'year' ? 'chart-toggle-btn active' : 'chart-toggle-btn';
-    if (expensesChart) expensesChart.clear();
+    if (expensesChart) {
+        expensesChart.clear();
+        expensesChart.destroy();
+        expensesChart = null;
+    }
     loadExpenses();
 }
 
 function renderChart(expenses) {
     const ctx = document.getElementById("expensesChart").getContext("2d");
     const totals = {};
+    
     expenses.forEach((e) => {
         // Ignora Fatura e Transferência no Gráfico Mensal
         if (e.category === "Pagamento de Fatura" || e.category === "Transferência") return;
         totals[e.category] = (totals[e.category] || 0) + e.amount;
     });
-    const labels = Object.keys(totals); const data = Object.values(totals);
+    
+    const labels = Object.keys(totals); 
+    const data = Object.values(totals);
+    
     if (expensesChart) expensesChart.destroy();
 
     expensesChart = new Chart(ctx, {
-        type: "bar",
+        type: "pie", // Gráfico de pizza padrão
         data: {
             labels: labels,
             datasets: [{
-                label: 'R$', data: data,
-                backgroundColor: ["#00e676", "#ff5252", "#2979ff", "#ffea00", "#ff9100", "#d500f9", "#00b0ff", "#ff1744"],
-                borderWidth: 0, borderRadius: 4, barPercentage: 0.6, maxBarThickness: 50
+                label: 'R$', 
+                data: data,
+                backgroundColor: [
+                    "#00e676", "#2979ff", "#ff5252", "#ffea00", 
+                    "#d500f9", "#00b0ff", "#ff9100", "#ff1744"
+                ],
+                borderColor: "#1e1e1e", // Cor de fundo do seu painel para separar fatias
+                borderWidth: 2
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false }, tooltip: { callbacks: { label: function (c) { return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); } } } },
-            scales: { x: { ticks: { color: '#000', font: { size: 11 } }, grid: { display: false } }, y: { beginAtZero: true, ticks: { color: '#000', font: { weight: 'bold' } }, grid: { color: '#807e7e' } } }
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: { 
+                legend: { 
+                    display: true,
+                    position: 'right',
+                    labels: { 
+                        color: '#000000',
+                        font: { size: 12 }
+                    }
+                }, 
+                tooltip: { 
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    callbacks: { 
+                        label: function (c) { 
+                            return ' ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); 
+                        } 
+                    } 
+                } 
+            }
         }
     });
 }
@@ -734,12 +764,14 @@ function renderAnnualChart() {
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: true, labels: { color: '#000' } }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, callbacks: { label: function (c) { return c.dataset.label + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); } } } },
-                    scales: { x: { ticks: { color: '#333' }, grid: { display: false } }, y: { ticks: { color: '#333', callback: function (v) { return 'R$ ' + v; } }, grid: { color: '#e0e0e0', borderDash: [5, 5] } } }
+                    plugins: { legend: { display: true, labels: { color: '#000000' } }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, callbacks: { label: function (c) { return c.dataset.label + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); } } } },
+                    scales: { x: { ticks: { color: '#000000' }, grid: { display: false } }, y: { ticks: { color: '#000000', callback: function (v) { return 'R$ ' + v; } }, grid: { color: '#444444', borderDash: [5, 5] } } }
                 }
             });
         });
 }
+
+
 
 /* ==========================================================================
    UTILITÁRIOS E EXPORTAÇÃO
