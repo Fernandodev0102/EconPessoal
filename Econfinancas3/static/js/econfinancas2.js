@@ -15,6 +15,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("filter-month").value = monthStr;
     document.getElementById("pay-invoice-date").value = today.toISOString().split('T')[0];
     document.getElementById("transfer-date").value = today.toISOString().split('T')[0];
+    
+    // NOVO: Data para Renda
+    const incomeDateEl = document.getElementById("income-date");
+    if(incomeDateEl) incomeDateEl.value = today.toISOString().split('T')[0];
 
     // Carrega dados
     loadCategories();
@@ -28,17 +32,45 @@ function setupEventListeners() {
     // Forms
     document.getElementById("expense-form").addEventListener("submit", addExpense);
     document.getElementById("add-category-btn").addEventListener("click", addCategory);
+    
+    // NOVO: Botão de salvar Renda
+    const saveIncomeBtn = document.getElementById("save-income-btn");
+    if(saveIncomeBtn) saveIncomeBtn.addEventListener("click", addIncome);
 
     // Filtros
     document.getElementById("filter-category").addEventListener("change", loadExpenses);
     document.getElementById("filter-payment").addEventListener("change", loadExpenses);
     document.getElementById("filter-month").addEventListener("change", loadExpenses);
     document.getElementById("filter-source").addEventListener("change", loadExpenses);
+    
+    // NOVO: Filtro de Status
+    const filterStatusEl = document.getElementById("filter-status");
+    if(filterStatusEl) filterStatusEl.addEventListener("change", loadExpenses);
+    
     document.getElementById("btn-next-invoice").addEventListener("click", filterNextInvoice);
     document.getElementById("clear-filters-btn").addEventListener("click", clearFilters);
     document.getElementById("export-btn").addEventListener("click", exportToExcel);
 
-    // Modais - Botões de abrir
+    // NOVO: Botão Master (Registrar Movimentação)
+    const masterBtn = document.getElementById("open-master-modal-btn");
+    if(masterBtn) {
+        masterBtn.addEventListener("click", () => {
+            renderFormDropdowns();
+            renderTransferOptions();
+            openModal("master-modal");
+        });
+    }
+
+    // NOVO: Botão Relatórios (Gráficos)
+    const reportsBtn = document.getElementById("open-reports-modal-btn");
+    if(reportsBtn) {
+        reportsBtn.addEventListener("click", () => {
+            openModal("reports-modal");
+            switchChart(currentChartMode); // Renderiza o gráfico ao abrir
+        });
+    }
+
+    // Modais Antigos - Botões de abrir
     document.getElementById("open-accounts-modal-btn").addEventListener("click", () => {
         renderAccountsModal();
         openModal("accounts-modal");
@@ -56,11 +88,7 @@ function setupEventListeners() {
         renderColorCustomization();
     });
 
-    // Botão Transferência
-    document.getElementById("open-transfer-modal-btn").addEventListener("click", () => {
-        openModal("transfer-modal");
-        renderTransferOptions();
-    });
+    // Botão Transferência (Mantido para o form que agora está no Master Modal)
     document.getElementById("confirm-transfer-btn").addEventListener("click", confirmTransfer);
 
     // Modais - Ações
@@ -98,7 +126,7 @@ function showFeedback(message, type) {
 }
 
 /* ==========================================================================
-   PROJEÇÃO DE CICLOS
+   PROJEÇÃO DE CICLOS E TÍTULOS
    ========================================================================== */
 async function loadCyclesProjection() {
     try {
@@ -117,6 +145,21 @@ async function loadCyclesProjection() {
         document.getElementById("val-30-others").textContent = formatCurrency(data.cycle_30.others);
         document.getElementById("val-30-total").textContent = formatCurrency(data.cycle_30.total);
     } catch (e) { console.error("Erro na projeção:", e); }
+}
+
+function updateCycleTitles() {
+    const monthVal = document.getElementById("filter-month").value;
+    if (!monthVal) return;
+    
+    const monthNumber = parseInt(monthVal.split('-')[1], 10);
+    const monthNames = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+    const monthName = monthNames[monthNumber];
+    
+    const title15 = document.getElementById("title-cycle-15");
+    const title30 = document.getElementById("title-cycle-30");
+    
+    if (title15) title15.textContent = `📦 Ciclo Dia 15 (${monthName})`;
+    if (title30) title30.textContent = `📦 Ciclo Dia 30 (${monthName})`;
 }
 
 /* ==========================================================================
@@ -140,7 +183,6 @@ function populateFixedSourceSelect() {
     }
 }
 
-// Global para ser acessível pelo HTML
 window.toggleFixedSourceInputs = function() {
     populateFixedSourceSelect();
 }
@@ -148,7 +190,7 @@ window.toggleFixedSourceInputs = function() {
 async function loadFixedExpenses() {
     const container = document.getElementById("fixed-list-display");
     container.innerHTML = "Carregando...";
-    populateFixedSourceSelect(); // Preenche o select de cadastro
+    populateFixedSourceSelect(); 
 
     try {
         const res = await fetch(`${API_URL}/fixed_expenses`);
@@ -165,7 +207,6 @@ async function loadFixedExpenses() {
             div.className = "bank-account-item";
             div.style.alignItems = "center";
             
-            // Botões: Lançar e Excluir
             const buttons = `
                 <div style="display:flex; gap:5px;">
                     <button onclick="launchFixedExpense(${item.id}, '${item.name}', ${item.amount})" style="background:#00e676; color:black; padding:5px 10px; font-weight:bold;" title="Lançar no mês atual">🚀 Lançar</button>
@@ -254,27 +295,37 @@ async function deleteFixedExpense(id) {
 }
 
 /* ==========================================================================
-   CRUD GASTOS
+   CRUD GASTOS E RENDAS
    ========================================================================== */
 async function loadExpenses() {
     try {
+        updateCycleTitles(); 
+        
         const query = buildQueryString();
         const response = await fetch(`${API_URL}/expenses${query}`);
         currentExpensesData = await response.json();
+        
         renderTable(currentExpensesData);
-        if (currentChartMode === 'month') renderChart(currentExpensesData);
-        else renderAnnualChart();
+        
+        // Atualiza os gráficos em background se o modal de relatórios estiver aberto
+        const reportsModal = document.getElementById("reports-modal");
+        if (reportsModal && reportsModal.classList.contains("show")) {
+            if (currentChartMode === 'month') renderChart(currentExpensesData);
+            else renderAnnualChart();
+        }
     } catch (e) { console.error(e); }
 }
 
 function renderTable(expenses) {
     const tbody = document.getElementById("expense-table-body");
     tbody.innerHTML = "";
+    
     expenses.forEach(e => {
         const row = document.createElement("tr");
         const d = e.date.split("-");
 
-        let statusIcon = e.status === 'CLOSED' ? '✅ ' : '';
+        // UI Baseada em Status
+        let statusIcon = e.status === 'CLOSED' ? '✅ ' : '🔴 ';
         let rowStyle = e.status === 'CLOSED' ? "opacity: 0.6;" : "";
         let desc = statusIcon + e.description;
         
@@ -282,11 +333,21 @@ function renderTable(expenses) {
 
         if (e.total_installments > 1) desc += ` <small>(${e.current_installment}/${e.total_installments})</small>`;
 
+        // UI Condicional para Rendas
+        let valStyle = e.status === 'CLOSED' ? 'color: #aaa;' : 'color: white;';
+        let valPrefix = "R$ ";
+        
+        if (e.is_income) {
+            valStyle = 'color: var(--accent-green);';
+            valPrefix = "+ R$ ";
+            desc = '🟢 ' + e.description; // Sobrescreve o icone de status para Renda
+        }
+
         let cycleBadge = e.computed_cycle === 15 
             ? '<span style="color:#4dd0e1; font-weight:bold; font-size:0.8em;">Ciclo 15</span>' 
             : '<span style="color:#ffb74d; font-weight:bold; font-size:0.8em;">Ciclo 30</span>';
 
-        if (isSystemRecord) cycleBadge = '<span style="font-size:0.8em; color:#aaa;">-</span>';
+        if (isSystemRecord || e.is_income) cycleBadge = '<span style="font-size:0.8em; color:#aaa;">-</span>';
 
         let actionButtons = `
             <div class="expense-row-actions">
@@ -300,14 +361,107 @@ function renderTable(expenses) {
                 <div style="font-weight:600; ${rowStyle}">${desc}</div>
                 <div style="font-size:0.8em; color:#aaa;">${e.category}</div>
             </td>
-            <td style="font-weight:bold; ${isSystemRecord ? 'color:#aaa;' : ''}">
-                R$ ${e.amount.toFixed(2)}
+            <td style="font-weight:bold; ${valStyle}">
+                ${valPrefix}${e.amount.toFixed(2)}
             </td>
             <td>${cycleBadge}</td>
             <td>${actionButtons}</td>
         `;
         tbody.appendChild(row);
     });
+}
+
+async function addExpense(event) {
+    event.preventDefault();
+    
+    const payMethod = document.getElementById("expense-payment").value;
+    let cardId = null, bankId = null, accName = "Carteira", finalMethod = payMethod;
+
+    if (payMethod === "Credit_Card") {
+        cardId = document.getElementById("expense-card-source").value;
+        if (!cardId) { alert("Selecione o Cartão!"); return; }
+        finalMethod = "Crédito";
+        const sel = document.getElementById("expense-card-source");
+        accName = sel.options[sel.selectedIndex].text;
+    } else {
+        const src = document.getElementById("expense-account-source").value;
+        if (src) {
+            if (src.startsWith("ACC-")) bankId = src.split("-")[1];
+            else if (src.startsWith("CARD-")) cardId = src.split("-")[1];
+            const sel = document.getElementById("expense-account-source");
+            accName = sel.options[sel.selectedIndex].text;
+        }
+    }
+
+    const payload = {
+        description: document.getElementById("expense-description").value,
+        amount: parseFloat(document.getElementById("expense-value").value),
+        date: document.getElementById("expense-date").value,
+        category: document.getElementById("expense-category").value,
+        payment_method: finalMethod, account_name: accName,
+        card_id: cardId, bank_account_id: bankId,
+        total_installments: parseInt(document.getElementById("expense-installments").value)
+    };
+
+    const response = await fetch(`${API_URL}/expenses`, {
+        method: 'POST',
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+
+    if (response.ok) {
+        document.getElementById("expense-form").reset();
+        document.getElementById("expense-id").value = ""; 
+        closeModal("master-modal"); // NOVO: Fecha o modal
+        showFeedback("Gasto salvo com sucesso!", "success");
+        loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
+    } else {
+        const err = await response.json(); showFeedback(err.error, "error");
+    }
+}
+
+// LÓGICA DE REGISTRO DE RENDA (NOVO)
+async function addIncome(event) {
+    event.preventDefault();
+    
+    const desc = document.getElementById("income-description").value;
+    const val = parseFloat(document.getElementById("income-value").value);
+    const date = document.getElementById("income-date").value;
+    const destId = document.getElementById("income-dest-source").value;
+
+    if (!desc || !val || !date || !destId) {
+        alert("Preencha todos os campos da receita!");
+        return;
+    }
+
+    const payload = {
+        description: desc,
+        amount: val,
+        date: date,
+        bank_account_id: destId,
+        type: 'income' // Flag para o Python saber que é Entrada
+    };
+
+    try {
+        const response = await fetch(`${API_URL}/incomes`, { 
+            method: 'POST',
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        if (response.ok) {
+            document.getElementById("income-form").reset();
+            closeModal("master-modal");
+            showFeedback("Renda registrada! Seu saldo subiu.", "success");
+            loadExpenses(); 
+            loadAccountsAndCards(); 
+        } else {
+            const err = await response.json(); showFeedback(err.error, "error");
+        }
+    } catch (e) {
+        console.error(e);
+        showFeedback("Erro ao registrar renda.", "error");
+    }
 }
 
 // LÓGICA DE EXCLUSÃO (Modal)
@@ -355,54 +509,6 @@ window.executeDelete = async function (scope) {
         }
     } catch (e) { console.error(e); }
     finally { pendingDeleteId = null; }
-}
-
-async function addExpense(event) {
-    event.preventDefault();
-    
-    const payMethod = document.getElementById("expense-payment").value;
-    let cardId = null, bankId = null, accName = "Carteira", finalMethod = payMethod;
-
-    if (payMethod === "Credit_Card") {
-        cardId = document.getElementById("expense-card-source").value;
-        if (!cardId) { alert("Selecione o Cartão!"); return; }
-        finalMethod = "Crédito";
-        const sel = document.getElementById("expense-card-source");
-        accName = sel.options[sel.selectedIndex].text;
-    } else {
-        const src = document.getElementById("expense-account-source").value;
-        if (src) {
-            if (src.startsWith("ACC-")) bankId = src.split("-")[1];
-            else if (src.startsWith("CARD-")) cardId = src.split("-")[1];
-            const sel = document.getElementById("expense-account-source");
-            accName = sel.options[sel.selectedIndex].text;
-        }
-    }
-
-    const payload = {
-        description: document.getElementById("expense-description").value,
-        amount: parseFloat(document.getElementById("expense-value").value),
-        date: document.getElementById("expense-date").value,
-        category: document.getElementById("expense-category").value,
-        payment_method: finalMethod, account_name: accName,
-        card_id: cardId, bank_account_id: bankId,
-        total_installments: parseInt(document.getElementById("expense-installments").value)
-    };
-
-    const response = await fetch(`${API_URL}/expenses`, {
-        method: 'POST',
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-    });
-
-    if (response.ok) {
-        document.getElementById("expense-form").reset();
-        document.getElementById("expense-id").value = ""; 
-        showFeedback("Salvo com sucesso!", "success");
-        loadExpenses(); loadAccountsAndCards(); loadCyclesProjection();
-    } else {
-        const err = await response.json(); showFeedback(err.error, "error");
-    }
 }
 
 /* ==========================================================================
@@ -486,23 +592,17 @@ function openPayInvoiceModal(id, name, val) {
     openModal("pay-invoice-modal");
 }
 
-/* ==========================================================================
-   CORREÇÃO DO BUG: CONFIRMAR PAGAMENTO FATURA
-   ========================================================================== */
 async function confirmPayInvoice() {
     const cardId = document.getElementById("pay-invoice-card-id").value;
     const bankId = document.getElementById("pay-invoice-bank-source").value;
     const amountVal = parseFloat(document.getElementById("pay-invoice-amount").value);
     const dateVal = document.getElementById("pay-invoice-date").value;
 
-    // Validação básica
     if (!amountVal || amountVal <= 0) {
         alert("Por favor, insira um valor válido para pagamento.");
         return;
     }
 
-    // --- CORREÇÃO DE LÓGICA NO FRONTEND ---
-    // 1. Encontra o cartão nos dados atuais para comparar o valor da fatura
     let currentCard = null;
     currentAccountsData.forEach(acc => {
         const found = acc.cards.find(c => c.id == cardId);
@@ -511,7 +611,6 @@ async function confirmPayInvoice() {
 
     const totalFatura = currentCard ? currentCard.open_invoice : amountVal;
     
-    // 2. Prepara o envio para a API
     const payload = {
         card_id: cardId,
         bank_account_id: bankId,
@@ -529,8 +628,7 @@ async function confirmPayInvoice() {
         if (res.ok) {
             closeModal("pay-invoice-modal");
             
-            // 3. Feedback Inteligente (Diferencia Parcial de Total)
-            if (amountVal < totalFatura - 0.05) { // margem de 5 centavos
+            if (amountVal < totalFatura - 0.05) { 
                 const restante = totalFatura - amountVal;
                 showFeedback(`Pagamento Parcial! Restam: R$ ${restante.toFixed(2)}`, "success");
             } else {
@@ -550,9 +648,6 @@ async function confirmPayInvoice() {
     }
 }
 
-/* ==========================================================================
-   PERSONALIZAÇÃO DE CORES
-   ========================================================================== */
 function renderColorCustomization() {
     const container = document.getElementById("color-list-display");
     container.innerHTML = "";
@@ -624,7 +719,7 @@ async function confirmTransfer() {
         });
 
         if(res.ok) {
-            closeModal("transfer-modal");
+            closeModal("master-modal"); // Fecha o modal master
             document.getElementById("transfer-amount").value = "";
             showFeedback("Transferência realizada!", "success");
             loadAccountsAndCards(); loadExpenses(); loadCyclesProjection();
@@ -686,7 +781,7 @@ function switchChart(mode) {
         expensesChart.destroy();
         expensesChart = null;
     }
-    loadExpenses();
+    loadExpenses(); // Chama loadExpenses para desenhar o gráfico com os dados atuais
 }
 
 function renderChart(expenses) {
@@ -694,8 +789,8 @@ function renderChart(expenses) {
     const totals = {};
     
     expenses.forEach((e) => {
-        // Ignora Fatura e Transferência no Gráfico Mensal
-        if (e.category === "Pagamento de Fatura" || e.category === "Transferência") return;
+        // Ignora transferências, faturas e rendas no gráfico de gastos
+        if (e.category === "Pagamento de Fatura" || e.category === "Transferência" || e.is_income) return;
         totals[e.category] = (totals[e.category] || 0) + e.amount;
     });
     
@@ -705,7 +800,7 @@ function renderChart(expenses) {
     if (expensesChart) expensesChart.destroy();
 
     expensesChart = new Chart(ctx, {
-        type: "pie", // Gráfico de pizza padrão
+        type: "pie", 
         data: {
             labels: labels,
             datasets: [{
@@ -715,7 +810,7 @@ function renderChart(expenses) {
                     "#00e676", "#2979ff", "#ff5252", "#ffea00", 
                     "#d500f9", "#00b0ff", "#ff9100", "#ff1744"
                 ],
-                borderColor: "#1e1e1e", // Cor de fundo do seu painel para separar fatias
+                borderColor: "#1e1e1e", 
                 borderWidth: 2
             }]
         },
@@ -727,7 +822,7 @@ function renderChart(expenses) {
                     display: true,
                     position: 'right',
                     labels: { 
-                        color: '#000000',
+                        color: '#ffffff', // Melhor visualização no dark mode
                         font: { size: 12 }
                     }
                 }, 
@@ -764,95 +859,54 @@ function renderAnnualChart() {
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { display: true, labels: { color: '#000000' } }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, callbacks: { label: function (c) { return c.dataset.label + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); } } } },
-                    scales: { x: { ticks: { color: '#000000' }, grid: { display: false } }, y: { ticks: { color: '#000000', callback: function (v) { return 'R$ ' + v; } }, grid: { color: '#444444', borderDash: [5, 5] } } }
+                    plugins: { legend: { display: true, labels: { color: '#ffffff' } }, tooltip: { backgroundColor: 'rgba(0,0,0,0.8)', padding: 10, callbacks: { label: function (c) { return c.dataset.label + ': ' + new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.raw); } } } },
+                    scales: { x: { ticks: { color: '#ffffff' }, grid: { display: false } }, y: { ticks: { color: '#ffffff', callback: function (v) { return 'R$ ' + v; } }, grid: { color: '#444444', borderDash: [5, 5] } } }
                 }
             });
         });
 }
 
-
-
 /* ==========================================================================
-   UTILITÁRIOS E EXPORTAÇÃO
+   DROPDOWNS E FILTROS 
    ========================================================================== */
-async function exportToExcel() {
-    if (!currentExpensesData.length) { alert("Sem dados."); return; }
-    const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet('Relatório');
-    ws.columns = [{ header: 'Data', key: 'd', width: 12 }, { header: 'Descrição', key: 'desc', width: 25 }, { header: 'Valor', key: 'v', width: 15 }, { header: 'Categoria', key: 'c', width: 15 }, { header: 'Pagamento', key: 'p', width: 15 }];
-    currentExpensesData.forEach(e => { if (e.category !== "Pagamento de Fatura") ws.addRow({ d: e.date, desc: e.description, v: e.amount, c: e.category, p: e.payment_method }); });
-    const buffer = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buffer]), "Relatorio_Financeiro.xlsx");
+function buildQueryString() { 
+    const month = document.getElementById("filter-month").value;
+    const cat = document.getElementById("filter-category").value;
+    const pay = document.getElementById("filter-payment").value;
+    const src = document.getElementById("filter-source").value;
+    const status = document.getElementById("filter-status") ? document.getElementById("filter-status").value : "";
+    return `?month=${month}&category=${cat}&payment_method=${pay}&source=${src}&status=${status}`; 
 }
 
-function formatCurrency(v) { return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
-function formatSimple(v) { return (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
-function openModal(id) { document.getElementById(id).classList.add("show"); }
-function closeModal(id) { document.getElementById(id).classList.remove("show"); }
-function buildQueryString() { return `?month=${document.getElementById("filter-month").value}&category=${document.getElementById("filter-category").value}&payment_method=${document.getElementById("filter-payment").value}&source=${document.getElementById("filter-source").value}`; }
-function clearFilters() { document.getElementById("filter-category").value = ""; document.getElementById("filter-payment").value = ""; document.getElementById("filter-source").value = ""; loadExpenses(); }
-
-// GESTÃO DE CONTAS
-async function saveNewAccount() {
-    const name = document.getElementById("new-account-name").value;
-    if (name) { await fetch(`${API_URL}/accounts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); document.getElementById("new-account-name").value = ""; loadAccountsAndCards(); renderAccountsModal(); }
-}
-
-async function deleteAccount(id) {
-    if (confirm("Excluir conta?")) { await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE' }); loadAccountsAndCards(); renderAccountsModal(); }
-}
-
-async function addCardToAccount(accId) {
-    const payload = {
-        name: document.getElementById(`new-card-name-${accId}`).value,
-        card_type: document.getElementById(`new-card-type-${accId}`).value,
-        closing_day: document.getElementById(`new-card-closing-${accId}`).value,
-        due_day: document.getElementById(`new-card-due-${accId}`).value,
-        bank_account_id: accId
-    };
-    if (!payload.name) { alert("Nome obrigatório"); return; }
-    await fetch(`${API_URL}/cards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    loadAccountsAndCards(); renderAccountsModal();
-}
-
-async function deleteCard(id) {
-    if (confirm("Excluir cartão?")) { await fetch(`${API_URL}/cards/${id}`, { method: 'DELETE' }); loadAccountsAndCards(); renderAccountsModal(); }
-}
-
-function renderAccountsModal() {
-    const container = document.getElementById("accounts-list-display");
-    if (currentAccountsData.length === 0) { container.innerHTML = "<p>Nenhuma conta.</p>"; return; }
-    container.innerHTML = currentAccountsData.map(acc => `
-        <div class="bank-account-item">
-            <div class="bank-header"><span class="bank-name">🏛️ ${acc.name}</span><button class="btn-delete btn-sm-action" onclick="deleteAccount(${acc.id})">Excluir</button></div>
-            <div class="card-add-container">
-                <div class="card-add-row"><select id="new-card-type-${acc.id}" class="card-type-select" onchange="toggleCardDates(${acc.id})"><option value="CREDIT">Crédito</option><option value="DEBIT">Débito</option></select><input type="text" id="new-card-name-${acc.id}" placeholder="Nome Cartão" class="card-name-input"></div>
-                <div id="date-inputs-${acc.id}" class="date-inputs-container"><input type="number" id="new-card-closing-${acc.id}" placeholder="Fech." class="card-date-input"><input type="number" id="new-card-due-${acc.id}" placeholder="Venc." class="card-date-input"></div>
-                <button onclick="addCardToAccount(${acc.id})" class="btn-add-card-confirm">Add Cartão</button>
-            </div>
-            <div class="card-list-nested">${acc.cards.map(c => `<div class="card-item-nested"><span>${c.type === 'CREDIT' ? '💳' : '🏧'} ${c.name}</span><button class="btn-delete btn-sm-action" onclick="deleteCard(${c.id})">🗑️</button></div>`).join("")}</div>
-        </div>
-    `).join("");
-}
-
-window.toggleCardDates = function (accId) {
-    const type = document.getElementById(`new-card-type-${accId}`).value;
-    const dates = document.getElementById(`date-inputs-${accId}`);
-    dates.style.display = (type === 'CREDIT') ? 'flex' : 'none';
+function clearFilters() { 
+    document.getElementById("filter-category").value = ""; 
+    document.getElementById("filter-payment").value = ""; 
+    document.getElementById("filter-source").value = ""; 
+    if(document.getElementById("filter-status")) document.getElementById("filter-status").value = "";
+    loadExpenses(); 
 }
 
 function renderFormDropdowns() {
     const accSel = document.getElementById("expense-account-source");
     const cardSel = document.getElementById("expense-card-source");
-    accSel.innerHTML = '<option value="">-- Escolha --</option>';
-    cardSel.innerHTML = '<option value="">-- Escolha --</option>';
+    const incSel = document.getElementById("income-dest-source"); // Novo select de Renda
+    
+    if(accSel) accSel.innerHTML = '<option value="">-- Escolha --</option>';
+    if(cardSel) cardSel.innerHTML = '<option value="">-- Escolha --</option>';
+    if(incSel) incSel.innerHTML = '<option value="">-- Escolha a Conta --</option>';
+    
     currentAccountsData.forEach(acc => {
-        accSel.innerHTML += `<option value="ACC-${acc.id}">Conta: ${acc.name}</option>`;
+        // Para Gastos
+        if(accSel) accSel.innerHTML += `<option value="ACC-${acc.id}">Conta: ${acc.name}</option>`;
+        
+        // Para Rendas (Mostra apenas a conta e o saldo)
+        if(incSel) incSel.innerHTML += `<option value="${acc.id}">🏛️ ${acc.name} (Saldo: R$ ${formatSimple(acc.balance)})</option>`;
+
         const debits = acc.cards.filter(c => c.type === 'DEBIT');
-        if (debits.length) { const grp = document.createElement("optgroup"); grp.label = acc.name; debits.forEach(c => grp.innerHTML += `<option value="CARD-${c.id}">${c.name}</option>`); accSel.appendChild(grp); }
+        if (debits.length && accSel) { const grp = document.createElement("optgroup"); grp.label = acc.name; debits.forEach(c => grp.innerHTML += `<option value="CARD-${c.id}">${c.name}</option>`); accSel.appendChild(grp); }
+        
         const credits = acc.cards.filter(c => c.type === 'CREDIT');
-        if (credits.length) { const grp = document.createElement("optgroup"); grp.label = acc.name; credits.forEach(c => grp.innerHTML += `<option value="${c.id}">${c.name}</option>`); cardSel.appendChild(grp); }
+        if (credits.length && cardSel) { const grp = document.createElement("optgroup"); grp.label = acc.name; credits.forEach(c => grp.innerHTML += `<option value="${c.id}">${c.name}</option>`); cardSel.appendChild(grp); }
     });
 }
 
@@ -881,4 +935,135 @@ function filterNextInvoice() {
     else { alert("Nenhum cartão encontrado."); }
 }
 
+/* ==========================================================================
+   UTILITÁRIOS E EXPORTAÇÃO
+   ========================================================================== */
+async function exportToExcel() {
+    if (!currentExpensesData.length) { alert("Sem dados."); return; }
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Relatório');
+    ws.columns = [{ header: 'Data', key: 'd', width: 12 }, { header: 'Descrição', key: 'desc', width: 25 }, { header: 'Valor', key: 'v', width: 15 }, { header: 'Categoria', key: 'c', width: 15 }, { header: 'Pagamento', key: 'p', width: 15 }, { header: 'Status', key: 's', width: 15 }];
+    currentExpensesData.forEach(e => { 
+        if (e.category !== "Pagamento de Fatura") {
+            const displayVal = e.is_income ? `+ ${e.amount}` : `- ${e.amount}`;
+            ws.addRow({ d: e.date, desc: e.description, v: displayVal, c: e.category, p: e.payment_method, s: e.status }); 
+        }
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    saveAs(new Blob([buffer]), "Relatorio_Financeiro.xlsx");
+}
 
+function formatCurrency(v) { return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }); }
+function formatSimple(v) { return (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 }); }
+function openModal(id) { document.getElementById(id).classList.add("show"); }
+function closeModal(id) { document.getElementById(id).classList.remove("show"); }
+
+/* ==========================================================================
+   TELA DE GERENCIAMENTO DE CONTAS E CARTÕES (UI REFORMULADA)
+   ========================================================================== */
+function renderAccountsModal() {
+    const container = document.getElementById("accounts-list-display");
+    
+    if (currentAccountsData.length === 0) { 
+        container.innerHTML = "<p style='color:#aaa; text-align:center; padding: 20px;'>Nenhuma conta cadastrada ainda. Crie uma acima!</p>"; 
+        return; 
+    }
+    
+    container.innerHTML = currentAccountsData.map(acc => `
+        <div style="background-color: #222; border-radius: 10px; padding: 20px; margin-bottom: 20px; border: 1px solid #333; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 12px; margin-bottom: 15px;">
+                <span style="font-size: 1.3em; font-weight: bold; color: white;">🏛️ ${acc.name}</span>
+                <button onclick="deleteAccount(${acc.id})" style="background: transparent; border: none; color: #ff5252; cursor: pointer; font-size: 0.9em; padding: 5px; transition: 0.2s;">🗑️ Excluir Conta</button>
+            </div>
+
+            <div style="background-color: #1a1a1a; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px dashed #555;">
+                <h4 style="margin: 0 0 12px 0; color: #aaa; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;">Adicionar Cartão</h4>
+                
+                <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 12px; margin-bottom: 12px;">
+                    <select id="new-card-type-${acc.id}" onchange="toggleCardDates(${acc.id})" style="width: 100%; padding: 10px; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 6px; outline: none;">
+                        <option value="CREDIT">Crédito</option>
+                        <option value="DEBIT">Débito</option>
+                    </select>
+                    <input type="text" id="new-card-name-${acc.id}" placeholder="Nome (Ex: Nubank, Black)" style="width: 100%; padding: 10px; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 6px; outline: none; box-sizing: border-box;">
+                </div>
+                
+                <div id="date-inputs-${acc.id}" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                    <div>
+                        <label style="display: block; font-size: 0.8em; color: #888; margin-bottom: 4px;">Dia de Fechamento</label>
+                        <input type="number" id="new-card-closing-${acc.id}" placeholder="Ex: 15" style="width: 100%; padding: 10px; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 6px; outline: none; box-sizing: border-box;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 0.8em; color: #888; margin-bottom: 4px;">Dia de Vencimento</label>
+                        <input type="number" id="new-card-due-${acc.id}" placeholder="Ex: 22" style="width: 100%; padding: 10px; background: #2c2c2c; border: 1px solid #444; color: white; border-radius: 6px; outline: none; box-sizing: border-box;">
+                    </div>
+                </div>
+
+                <button onclick="addCardToAccount(${acc.id})" style="width: 100%; padding: 12px; background-color: var(--accent-green, #00e676); color: black; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: 0.2s; font-size: 1em;">+ Adicionar Cartão</button>
+            </div>
+
+            <div>
+                ${acc.cards.length > 0 ? `<h4 style="margin: 0 0 10px 0; color: #aaa; font-size: 0.9em;">Cartões Ativos</h4>` : ''}
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${acc.cards.map(c => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #2a2a2a; padding: 12px 15px; border-radius: 6px; border-left: 4px solid ${c.type === 'CREDIT' ? '#ff5252' : '#00b0ff'};">
+                            <div>
+                                <span style="color: white; font-weight: 500; font-size: 1.05em;">${c.type === 'CREDIT' ? '💳' : '🏧'} ${c.name}</span>
+                                <div style="color: #888; font-size: 0.85em; margin-top: 2px;">
+                                    ${c.type === 'CREDIT' ? `Vencimento: Dia ${c.due_day || '--'} • Fechamento: Dia ${c.closing_day || '--'}` : 'Débito / Pix'}
+                                </div>
+                            </div>
+                            <button onclick="deleteCard(${c.id})" style="background: transparent; border: none; color: #ff5252; cursor: pointer; font-size: 1.1em; padding: 5px;">🗑️</button>
+                        </div>
+                    `).join("")}
+                </div>
+            </div>
+
+        </div>
+    `).join("");
+}
+
+window.toggleCardDates = function (accId) {
+    const type = document.getElementById(`new-card-type-${accId}`).value;
+    const dates = document.getElementById(`date-inputs-${accId}`);
+    dates.style.display = (type === 'CREDIT') ? 'grid' : 'none';
+}
+
+async function saveNewAccount() {
+    const name = document.getElementById("new-account-name").value;
+    if (name) { 
+        await fetch(`${API_URL}/accounts`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }); 
+        document.getElementById("new-account-name").value = ""; 
+        loadAccountsAndCards(); 
+        renderAccountsModal(); 
+    }
+}
+
+async function deleteAccount(id) {
+    if (confirm("Excluir conta?")) { 
+        await fetch(`${API_URL}/accounts/${id}`, { method: 'DELETE' }); 
+        loadAccountsAndCards(); 
+        renderAccountsModal(); 
+    }
+}
+
+async function addCardToAccount(accId) {
+    const payload = {
+        name: document.getElementById(`new-card-name-${accId}`).value,
+        card_type: document.getElementById(`new-card-type-${accId}`).value,
+        closing_day: document.getElementById(`new-card-closing-${accId}`).value,
+        due_day: document.getElementById(`new-card-due-${accId}`).value,
+        bank_account_id: accId
+    };
+    if (!payload.name) { alert("Nome obrigatório"); return; }
+    await fetch(`${API_URL}/cards`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    loadAccountsAndCards(); renderAccountsModal();
+}
+
+async function deleteCard(id) {
+    if (confirm("Excluir cartão?")) { 
+        await fetch(`${API_URL}/cards/${id}`, { method: 'DELETE' }); 
+        loadAccountsAndCards(); 
+        renderAccountsModal(); 
+    }
+}

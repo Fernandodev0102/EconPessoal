@@ -1,6 +1,7 @@
 import os
 import uuid
 import calendar
+import holidays
 from datetime import datetime, timedelta, date
 from flask import Flask, request, jsonify, render_template
 from flask_sqlalchemy import SQLAlchemy
@@ -26,60 +27,109 @@ def add_months(source_date, months):
     day = min(source_date.day, calendar.monthrange(year, month)[1])
     return source_date.replace(year=year, month=month, day=day)
 
-def get_next_closing_date(card, ref_date=None):
-    """Calcula a data do fechamento da fatura VIGENTE."""
-    if not ref_date: ref_date = date.today()
-    if not card.closing_day: return ref_date 
 
-    # Se hoje <= dia fechamento, fatura fecha neste mês
-    if ref_date.day <= card.closing_day:
-        return date(ref_date.year, ref_date.month, card.closing_day)
-    else:
-        # Se passou, fatura fecha mês que vem
-        month = ref_date.month + 1
-        year = ref_date.year
-        if month > 12:
-            month = 1
-            year += 1
-        day = min(card.closing_day, calendar.monthrange(year, month)[1])
-        return date(year, month, day)
-
-def get_invoice_period(card, ref_date=None):
-    """Define o INÍCIO e FIM da fatura vigente para filtragem exata."""
-    if not ref_date: ref_date = date.today()
+# --- UTILITÁRIOS (ROBUSTEZ DE CARTÃO DE CRÉDITO) ---
+def get_installment_due_date(base_date, card, installment_index=0):
+    """
+    Calcula a data exata de VENCIMENTO em que uma parcela vai cair.
+    Lógica: Se a data da compra passou do fechamento, a 1ª parcela vai para o mês seguinte.
+    """
+    month = base_date.month
+    year = base_date.year
     
-    # Cartão sem data definida: mostra tudo até hoje
-    if not card.closing_day: 
-        return date(1900, 1, 1), ref_date 
-
-    # Descobre o FIM (Closing Date)
-    if ref_date.day <= card.closing_day:
-        closing_date = date(ref_date.year, ref_date.month, card.closing_day)
-        # Início = Fechamento do mês passado
-        prev_month = ref_date.month - 1 if ref_date.month > 1 else 12
-        prev_year = ref_date.year if ref_date.month > 1 else ref_date.year - 1
-        prev_day = min(card.closing_day, calendar.monthrange(prev_year, prev_month)[1])
-        start_date = date(prev_year, prev_month, prev_day)
-    else:
-        # Fatura do próximo mês
-        closing_month = ref_date.month + 1 if ref_date.month < 12 else 1
-        closing_year = ref_date.year if ref_date.month < 12 else ref_date.year + 1
-        day_adj = min(card.closing_day, calendar.monthrange(closing_year, closing_month)[1])
-        closing_date = date(closing_year, closing_month, day_adj)
+    # Se a compra foi DEPOIS do dia de fechamento, cai na próxima fatura
+    if card and card.closing_day and base_date.day > card.closing_day:
+        month += 1
         
-        # Início = Fechamento deste mês
-        start_day = min(card.closing_day, calendar.monthrange(ref_date.year, ref_date.month)[1])
-        start_date = date(ref_date.year, ref_date.month, start_day)
+    # Adiciona os meses da parcela atual (0 para a primeira, 1 para a segunda...)
+    month += installment_index
+    
+    # Ajusta a virada de ano
+    year += (month - 1) // 12
+    month = (month - 1) % 12 + 1
+    
+    # O dia será o dia do vencimento do cartão (se não tiver, usa o fechamento ou o dia da compra)
+    target_day = card.due_day if (card and card.due_day) else (card.closing_day if (card and card.closing_day) else base_date.day)
+    
+    # Previne erros de calendário (ex: 31 de fevereiro)
+    target_day = min(target_day, calendar.monthrange(year, month)[1])
+    
+    return date(year, month, target_day)
 
-    return start_date, closing_date
+# Instancia os feriados do Brasil para consulta rápida
+br_holidays = holidays.Brazil()
+
+def get_next_business_day(target_date):
+    """
+    Verifica se a data cai em fim de semana ou feriado.
+    Se sim, empurra para o próximo dia útil.
+    """
+    # weekday(): 0=Segunda ... 5=Sábado, 6=Domingo
+    while target_date.weekday() >= 5 or target_date in br_holidays:
+        target_date += timedelta(days=1)
+    return target_date
+
+def get_installment_due_date(base_date, card, installment_index=0):
+    """
+    Calcula a data exata de VENCIMENTO.
+    Lida perfeitamente com cartões onde o Vencimento (dia 4) é menor que o Fechamento (dia 25).
+    """
+    month = base_date.month
+    year = base_date.year
+    
+    # 1. Pega os dias do cartão (ou usa o dia da compra como segurança se estiver vazio)
+    closing = card.closing_day if (card and card.closing_day) else base_date.day
+    due = card.due_day if (card and card.due_day) else closing
+    
+    # 2. Descobre em qual mês essa fatura FECHA
+    closing_month = month
+    if base_date.day > closing:
+        closing_month += 1
+        
+    # 3. Descobre em qual mês essa fatura VENCE
+    due_month = closing_month
+    if due < closing:
+        # Se vence dia 4, mas fecha dia 25, o pagamento é sempre no mês seguinte ao fechamento!
+        due_month += 1
+        
+    # 4. Adiciona o índice da parcela (0, 1, 2...)
+    due_month += installment_index
+    
+    # 5. Ajusta a virada de ano matematicamente
+    year += (due_month - 1) // 12
+    due_month = (due_month - 1) % 12 + 1
+    
+    # 6. Previne erros de calendário (ex: vencimento dia 31 caindo em fevereiro)
+    target_day = min(due, calendar.monthrange(year, due_month)[1])
+    
+    initial_due_date = date(year, due_month, target_day)
+    
+    # Aplica a regra do Banco Central (pula finais de semana e feriados)
+    return get_next_business_day(initial_due_date)
 
 def calculate_open_invoice_window(card, ref_date=None):
     """
-    Soma despesas que caem DENTRO da janela da fatura atual.
-    Ignora compras antigas (já fechadas) e futuras (próxima fatura).
+    Soma APENAS as despesas que pertencem EXATAMENTE ao ciclo da fatura atual.
+    Blinda contra compras antigas (retroativas) não pagas sendo somadas juntas.
     """
     if not ref_date: ref_date = date.today()
-    start_date, end_date = get_invoice_period(card, ref_date)
+    
+    # 1. Data de vencimento da fatura ATUAL (O teto)
+    current_due_date = get_installment_due_date(ref_date, card, 0)
+    
+    # 2. Descobre o mês passado para calcular o vencimento ANTERIOR
+    m = ref_date.month - 1
+    y = ref_date.year
+    if m < 1:
+        m = 12
+        y -= 1
+        
+    # Previne erros de calendário ao voltar um mês (ex: 31 de Março -> 28 de Fevereiro)
+    prev_day = min(ref_date.day, calendar.monthrange(y, m)[1])
+    prev_ref_date = date(y, m, prev_day)
+    
+    # 3. Data de vencimento da fatura PASSADA (O piso / escudo)
+    prev_due_date = get_installment_due_date(prev_ref_date, card, 0)
     
     all_open = Expense.query.filter_by(card_id=card.id, status='OPEN').all()
     total = 0.0
@@ -90,12 +140,11 @@ def calculate_open_invoice_window(card, ref_date=None):
             try: e_date = datetime.strptime(e_date, '%Y-%m-%d').date()
             except: continue
 
-        # A despesa pertence a esta fatura SE: Data > Inicio E Data <= Fim
-        if e_date > start_date and e_date <= end_date:
+        # A BLINDAGEM: A conta precisa vencer DEPOIS da fatura passada e ATÉ a fatura atual
+        if e_date > prev_due_date and e_date <= current_due_date:
             total += expense.amount
             
-    return total, end_date
-
+    return total, current_due_date
 # --- MODELOS ---
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -143,6 +192,7 @@ class Expense(db.Model):
     group_id = db.Column(db.String(36), nullable=True)
     status = db.Column(db.String(20), default='OPEN')
     transfer_dest_id = db.Column(db.Integer, nullable=True)
+    is_income = db.Column(db.Boolean, default=False) # ADICIONADO: Flag para identificar Renda
 
 # --- ROTAS ---
 @app.route('/')
@@ -154,7 +204,7 @@ def reset_force():
         db.drop_all()
         db.create_all()
         if not Category.query.first():
-            for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura", "Transferência", "Gastos Fixos"]: 
+            for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura", "Transferência", "Gastos Fixos", "Receitas"]: # ADICIONADO "Receitas"
                 db.session.add(Category(name=n))
             db.session.commit()
         return "<h1>Sistema Resetado!</h1>"
@@ -276,6 +326,7 @@ def cycles_projection():
         Expense.status == 'OPEN', 
         Expense.card_id == None, 
         Expense.category != 'Transferência',
+        Expense.is_income == False, # ADICIONADO: Ignora rendas na soma de contas a pagar
         Expense.date <= today
     ).all()
 
@@ -289,6 +340,7 @@ def cycles_projection():
     c30['total'] = c30['cards'] + c30['fixed'] + c30['others']
     
     return jsonify({'cycle_15': c15, 'cycle_30': c30})
+
 # --- EXPENSES CRUD ---
 @app.route('/api/expenses', methods=['GET', 'POST'])
 def handle_expenses():
@@ -298,7 +350,10 @@ def handle_expenses():
         pay = request.args.get('payment_method')
         month_str = request.args.get('month') 
         src = request.args.get('source') 
+        status_filter = request.args.get('status') # ADICIONADO: Filtro de Status
+        
         if cat: query = query.filter_by(category=cat)
+        if status_filter: query = query.filter_by(status=status_filter) # ADICIONADO: Aplica o filtro
         if pay:
             if pay == "Crédito": query = query.filter(Expense.payment_method.like('%Crédito%'))
             elif pay == "Vista": query = query.filter(Expense.payment_method.in_(['Pix', 'Débito', 'Dinheiro']))
@@ -321,7 +376,8 @@ def handle_expenses():
                 c = Card.query.get(e.card_id)
                 if c and c.due_day: day_ref = c.due_day
             if 15 <= day_ref <= 29: cycle = 15
-            output.append({'id': e.id, 'description': e.description, 'amount': e.amount, 'date': str(e.date), 'category': e.category, 'account': e.account_name, 'payment_method': e.payment_method, 'current_installment': e.current_installment, 'total_installments': e.total_installments, 'card_id': e.card_id, 'bank_account_id': e.bank_account_id, 'computed_cycle': cycle, 'status': e.status})
+            # ADICIONADO 'is_income' no retorno
+            output.append({'id': e.id, 'description': e.description, 'amount': e.amount, 'date': str(e.date), 'category': e.category, 'account': e.account_name, 'payment_method': e.payment_method, 'current_installment': e.current_installment, 'total_installments': e.total_installments, 'card_id': e.card_id, 'bank_account_id': e.bank_account_id, 'computed_cycle': cycle, 'status': e.status, 'is_income': e.is_income})
         return jsonify(output)
 
     if request.method == 'POST':
@@ -335,30 +391,56 @@ def handle_expenses():
             grp_id = str(uuid.uuid4())
             inst_val = amt_tot / inst_tot
             
-            # --- CORREÇÃO AQUI: REMOVIDO 'OFFSET' ---
-            # Antes: Se data > fechamento, somava 1 mês na data.
-            # Agora: Salva a data real. A função 'calculate_open_invoice_window' saberá que isso é fatura futura.
-            offset = 0 
             status = 'OPEN'
+            card = None
             
             if c_id:
                 card = Card.query.get(c_id)
                 if card:
-                    if card.limit is not None and card.limit < amt_tot: return jsonify({'error': 'Limite insuficiente'}), 400
+                    if card.limit is not None and card.limit < amt_tot:
+                        return jsonify({'error': 'Limite insuficiente'}), 400
                     card.limit -= amt_tot
             elif b_id:
                 status = 'CLOSED'
                 b = BankAccount.query.get(b_id)
                 if b:
-                    if b.current_balance < amt_tot: return jsonify({'error': 'Saldo insuficiente'}), 400
+                    if b.current_balance < amt_tot:
+                        return jsonify({'error': 'Saldo insuficiente'}), 400
                     b.current_balance -= amt_tot
 
             for i in range(inst_tot):
-                this_date = add_months(base_date, i + offset)
-                db.session.add(Expense(description=d['description'], amount=inst_val, date=this_date, category=d['category'], account_name=d['account_name'], payment_method=d['payment_method'], bank_account_id=b_id, card_id=c_id, is_credit_card=d.get('is_credit_card', False), total_installments=inst_tot, current_installment=i+1, description_original=d['description'], group_id=grp_id, status=status))
+                if card:
+                    # Para Cartão: A data no banco vira a DATA DO VENCIMENTO da fatura
+                    this_date = get_installment_due_date(base_date, card, i)
+                    # Registramos o dia da compra real na descrição para você não esquecer
+                    desc = f"{d['description']} ({base_date.strftime('%d/%m')})"
+                else:
+                    # Para Débito/Pix: Salva a data real e apenas soma os meses
+                    this_date = add_months(base_date, i)
+                    desc = d['description']
+
+                db.session.add(Expense(
+                    description=desc, 
+                    amount=inst_val, 
+                    date=this_date, 
+                    category=d['category'], 
+                    account_name=d['account_name'], 
+                    payment_method=d['payment_method'], 
+                    bank_account_id=b_id, 
+                    card_id=c_id, 
+                    is_credit_card=d.get('is_credit_card', False), 
+                    total_installments=inst_tot, 
+                    current_installment=i+1, 
+                    description_original=d['description'], 
+                    group_id=grp_id, 
+                    status=status,
+                    is_income=False
+                ))
             db.session.commit()
             return jsonify({'message': 'Salvo!'}), 201
-        except Exception as e: db.session.rollback(); return jsonify({'error': str(e)}), 500
+        except Exception as e: 
+            db.session.rollback()
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/expenses/<id>', methods=['DELETE', 'PUT'])
 def expense_ops(id):
@@ -369,19 +451,58 @@ def expense_ops(id):
             scope = request.args.get('scope', 'single')
             to_del = Expense.query.filter_by(group_id=e.group_id).all() if scope == 'all' and e.group_id else [e]
             for item in to_del:
-                if item.card_id:
-                    c = Card.query.get(item.card_id)
-                    if c and c.limit is not None: c.limit += item.amount
-                elif item.bank_account_id:
-                    b = BankAccount.query.get(item.bank_account_id)
-                    if b: b.current_balance += item.amount
-                if item.transfer_dest_id:
-                    da = BankAccount.query.get(item.transfer_dest_id)
-                    if da: da.current_balance -= item.amount
+                # ADICIONADO: Lógica de exclusão reversa para Rendas
+                if item.is_income:
+                    if item.bank_account_id:
+                        b = BankAccount.query.get(item.bank_account_id)
+                        if b: b.current_balance -= item.amount
+                else:
+                    if item.card_id:
+                        c = Card.query.get(item.card_id)
+                        if c and c.limit is not None: c.limit += item.amount
+                    elif item.bank_account_id:
+                        b = BankAccount.query.get(item.bank_account_id)
+                        if b: b.current_balance += item.amount
+                    if item.transfer_dest_id:
+                        da = BankAccount.query.get(item.transfer_dest_id)
+                        if da: da.current_balance -= item.amount
                 db.session.delete(item)
             db.session.commit(); return jsonify({'message': 'Excluído'})
         except Exception as err: db.session.rollback(); return jsonify({'error': str(err)}), 500
     if request.method == 'PUT': return jsonify({'error': 'Edição desativada'}), 400
+
+# --- NOVA ROTA: REGISTRO DE RENDA ---
+@app.route('/api/incomes', methods=['POST'])
+def add_income():
+    try:
+        d = request.json
+        dt = datetime.strptime(d['date'], '%Y-%m-%d').date()
+        amt = float(d['amount'])
+        b_id = int(d['bank_account_id'])
+        
+        bank = BankAccount.query.get(b_id)
+        if not bank: return jsonify({'error': 'Conta de destino não encontrada'}), 404
+        
+        # Aumenta o saldo do banco
+        bank.current_balance += amt
+        
+        # Salva o registro marcando como Renda (is_income = True)
+        db.session.add(Expense(
+            description=d['description'],
+            amount=amt,
+            date=dt,
+            category="Receitas",
+            account_name=bank.name,
+            payment_method="Pix", 
+            bank_account_id=bank.id,
+            status='CLOSED', # Rendas já entram como "recebidas" (pagas)
+            is_income=True
+        ))
+        db.session.commit()
+        return jsonify({'message': 'Renda registrada com sucesso!'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/transfers', methods=['POST'])
 def transfer_balance():
@@ -417,7 +538,6 @@ def pay_invoice():
         if card.limit is not None: card.limit += amt
 
         # 2. Fecha itens da Janela Atual
-        start_date, end_date = get_invoice_period(card, dt)
         all_open = Expense.query.filter(Expense.card_id == card.id, Expense.status == 'OPEN').all()
         for ex in all_open:
             ex_date = ex.date
@@ -425,8 +545,8 @@ def pay_invoice():
                 try: ex_date = datetime.strptime(ex_date, '%Y-%m-%d').date()
                 except: continue
             
-            # Fecha se estiver dentro da janela que estamos pagando
-            if ex_date <= end_date:
+            # Fecha todas as parcelas que vencem até a data da fatura que estamos pagando
+            if ex_date <= closing_date:
                 ex.status = 'CLOSED'
         
         # 3. Rollover (Dívida Restante)
@@ -469,7 +589,8 @@ def annual_chart():
     exps = Expense.query.filter(extract('year', Expense.date) == yr).all()
     cr, db_vals = [0.0]*13, [0.0]*13
     for e in exps:
-        if e.category in ["Pagamento de Fatura", "Transferência"]: continue
+        # ADICIONADO: Ignora renda e transferência no gráfico de gastos
+        if e.category in ["Pagamento de Fatura", "Transferência"] or getattr(e, 'is_income', False): continue
         m = e.date.month
         c_obj = Card.query.get(e.card_id) if e.card_id else None
         is_cr = ('Crédito' in e.payment_method) or (c_obj and c_obj.card_type == 'CREDIT')
@@ -498,11 +619,8 @@ def cat_ops(id):
 with app.app_context():
     db.create_all()
     if not Category.query.first():
-        for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura", "Transferência", "Gastos Fixos"]: db.session.add(Category(name=n))
+        # ADICIONADO "Receitas" nas categorias base
+        for n in ["Alimentação", "Transporte", "Lazer", "Casa", "Educação", "Saúde", "Outros", "Pagamento de Fatura", "Transferência", "Gastos Fixos", "Receitas"]: db.session.add(Category(name=n))
         db.session.commit()
 
 if __name__ == '__main__': app.run(debug=True)
-
-
-
-
