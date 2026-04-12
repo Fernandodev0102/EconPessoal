@@ -1,0 +1,110 @@
+🏛️ Documento de Arquitetura: EconPessoal 2.0
+1. Regras de Negócio (RN)
+As leis matemáticas e lógicas imutáveis que garantem a integridade financeira do sistema.
+
+RN01 - Lógica de Vencimento de Fatura: Se a data de uma compra no cartão de crédito for maior ou igual ao "Dia de Fechamento" configurado, a primeira parcela deve ser lançada automaticamente na fatura do ciclo (mês) subsequente.
+
+RN02 - Avanço de Dias Não Úteis: Faturas de cartão ou despesas fixas não podem ter o vencimento cobrado em fins de semana ou feriados. O sistema deve transferir a cobrança para o próximo dia útil subsequente.
+
+RN03 - Isolamento de Ciclo (Escudo de Fatura): O valor total da fatura atual deve somar apenas as despesas que vencem no ciclo de cobrança vigente. Parcelas atrasadas ou faturas antigas não pagas são blindadas e não distorcem o valor da fatura do mês atual.
+
+RN04 - Amortização e Transbordo (Rollover): Pagamentos parciais realizados antes ou no dia do vencimento são classificados como Amortização, apenas reduzindo o saldo devedor da fatura atual. O "Transbordo" (geração de dívida no mês seguinte com juros) só deve ser acionado pelo sistema na virada do dia do vencimento, caso o saldo daquela fatura seja maior que zero.
+
+RN05 - Antecipação de Parcelas: Ao antecipar parcelas futuras de uma compra, o sistema não exclui os registros originais. Ele deve alterar o status dessas parcelas para "Pago", atualizar a data de competência para o mês atual e inseri-las na fatura aberta vigente, mantendo a rastreabilidade do fluxo de caixa.
+
+RN06 - Trava de Pagamento Excedente: O sistema deve bloquear terminantemente qualquer tentativa de pagamento de fatura com valor superior ao saldo devedor atual. O botão de confirmação deve ser desabilitado e o usuário alertado da restrição bancária.
+
+RN07 - Cálculo de Limite Dinâmico: O "Limite Disponível" do cartão não é um valor estático salvo no banco de dados. Ele deve ser calculado em tempo real através da fórmula: Limite Total – (Soma de todas as transações atreladas ao cartão com status "A Pagar").
+
+RN08 - Estorno de Exclusão (Rollback): A exclusão de uma Saída (já paga) devolve o valor ao saldo da conta de origem. A exclusão de uma Entrada subtrai o valor do saldo da conta de destino.
+
+RN09 - Neutralidade de Transferência: Transações entre contas do mesmo usuário recebem o tipo "Transferência". Elas alteram os saldos das contas envolvidas, mas são matematicamente isoladas das métricas de "Receitas" e "Despesas" para não inflacionar os relatórios financeiros no Power BI.
+
+RN10 - Regra de Fechamento: Uma fatura transita do status "Aberta" para "Fechada" unicamente quando a data do sistema operacional ultrapassa o "Dia de Fechamento" daquele cartão.
+
+RN11 - Congelamento de Limite Pós-Fechamento: O limite de crédito comprometido por uma fatura que já atingiu sua "Data de Fechamento" permanece retido (bloqueado) no sistema. Esse limite só retorna ao "Limite Disponível" do usuário no momento exato em que o pagamento dessa fatura for registrado, mesmo que haja um vácuo de dias entre o fechamento e o vencimento.
+
+RN12 - Segregação de Ativos (Investimentos):
+Uma transação do tipo "Investimento" retira saldo de uma Conta Origem (Corrente), mas não é contabilizada na métrica de "Despesas/Gastos". Ela deve ser tratada como uma transferência de liquidez para aumento de Patrimônio Líquido, sendo enviada para uma conta de destino categorizada como "Ativo de Investimento".
+
+RN13 - Regime de Competência vs Caixa:
+O sistema deve suportar a distinção entre regime de competência (quando a despesa pertence ao período contábil) e regime de caixa (quando há efetiva movimentação financeira). Relatórios devem permitir alternância ou visualização segregada entre os dois regimes.
+
+RN14 - Imutabilidade de Transações Pagas:
+Transações com status "Pago" não podem ser editadas diretamente. Qualquer modificação deve ocorrer via lançamento de estorno ou transação de ajuste, garantindo rastreabilidade completa do histórico financeiro.
+
+RN15 - Conciliação de Saldo:
+O sistema deve permitir a conciliação manual de saldo entre o valor calculado internamente e o saldo real informado pelo usuário, gerando automaticamente uma transação de ajuste para equalização.
+
+RN16 - Integridade Temporal de Transações:
+O sistema deve impedir inconsistências cronológicas, como pagamentos com data anterior à criação da transação, estornos antes do pagamento ou registros com datas incoerentes na linha do tempo financeira.
+
+RN17 - Suporte a Multimoeda (Preparação):
+Toda transação deve conter referência à moeda utilizada. O sistema deve estar preparado para suportar taxas de conversão, ainda que não utilizadas inicialmente, visando escalabilidade futura.
+
+RN18 - Controle de Limite Excedido:
+O sistema deve permitir que o limite de crédito seja ultrapassado, sinalizando visualmente o estado de "limite excedido", ou opcionalmente bloquear a transação com base em configuração do usuário.
+
+RN19 - Prioridade de Quitação de Débitos:
+Pagamentos parciais devem seguir uma ordem lógica de amortização: primeiro encargos (juros e multas, quando aplicável), depois o valor principal da dívida.
+
+RN20 - Gestão de Liquidez e Resgate: Todo aporte de investimento deve registrar sua "Data de Liquidez" (podendo ser imediata, como D+0, ou uma data futura fixa, como um CDB de 2 anos). O resgate converte o saldo do ativo de volta para a conta transacional. Tentativas de resgate com data anterior à data de liquidez do ativo devem disparar um alerta de bloqueio ou perda de rentabilidade.
+
+
+
+2. Requisitos Funcionais (RF)
+As ações, recursos e comportamentos que o sistema deve fornecer ao usuário.
+
+RF01 - Tipagem de Lançamentos (Atualizado): O sistema deve possuir interface unificada (Modal) para registrar quatro modalidades de transação: Entradas (Receitas), Saídas (Despesas), Transferências e Investimentos (Aportes).
+
+RF02 - Motor de Parcelamento: O sistema deve permitir o parcelamento automático de saídas na modalidade "Crédito", dividindo o valor total de forma igualitária e distribuindo as competências mensalmente nos próximos ciclos.
+
+RF03 - Gestão de Contas e Cartões: O usuário deve ser capaz de criar, editar (nome, cor, limites, datas) e excluir Contas Bancárias, bem como atrelar múltiplos Cartões de Crédito a uma mesma instituição.
+
+RF04 - Automação de Gastos Fixos: O sistema deve suportar a criação de templates de despesas recorrentes (Gastos Fixos), permitindo o lançamento rápido no mês vigente descontando da origem pré-definida.
+
+RF05 - Pagamento de Faturas: O sistema deve permitir a baixa (pagamento total ou parcial) de faturas, exigindo a seleção de uma conta corrente/débito de origem para efetivar a dedução do saldo.
+
+RF06 - Detalhamento UI (Dashboard): A tela inicial deve possuir cards informativos detalhados, exibindo não apenas montantes (ex: R$ 430,50), mas quebrando a informação por fontes (ex: Itaú, Nubank) e meses de referência.
+
+RF07 - Exportação Transacional (Motor BI): O sistema deve possuir uma rota/ação nativa para exportar 100% do histórico financeiro em formato .csv bruto, com colunas otimizadas para ingestão e modelagem de dados.
+
+RF08 - Painel de Gestão de Patrimônio: O sistema deve diferenciar visual e logicamente as contas bancárias em duas categorias: "Contas Transacionais" (para o giro do dia a dia e pagamento de faturas) e "Carteira de Investimentos" (para acúmulo de longo prazo), exibindo o montante total de cada categoria em cards separados no Dashboard.
+
+RF09 - Log de Auditoria:
+O sistema deve registrar todas as ações relevantes do usuário (criação, edição, exclusão, pagamento), armazenando data, hora e tipo de operação para fins de rastreabilidade.
+
+RF10 - Filtros Avançados:
+O sistema deve permitir a filtragem de transações por múltiplos critérios, incluindo período, conta, categoria, tipo de transação e status.
+
+RF11 - Sistema de Alertas:
+O sistema deve notificar o usuário sobre eventos relevantes, como proximidade de vencimento de faturas, uso elevado do limite de crédito e saldo insuficiente em contas.
+
+RF12 - Motor Operacional de Investimentos: O modal de transações deve permitir alternar a operação de investimento entre "Aporte" (dinheiro indo para o ativo, onde define-se a liquidez) e "Resgate" (dinheiro voltando para o banco).
+
+
+
+
+
+3. Requisitos Não Funcionais (RNF)
+Os critérios de qualidade, arquitetura e tecnologia empregados.
+
+RNF01 - Arquitetura Back-end Modular: O núcleo do sistema em Python/Flask deve operar sob o padrão Application Factory ou modularização estrita, dividindo responsabilidades em no mínimo três arquivos (models.py para dados, services.py para lógica de negócios, e app.py para roteamento web).
+
+RNF02 - Frontend SPA (Single Page Application): A interface deve funcionar em ambiente de página única, utilizando JavaScript vanila para o controle de estado e transição de visualizações (Views) via manipulação de DOM, sem reloads de navegador.
+
+RNF03 - Integridade e Persistência: A base de dados deve ser relacional (SQLite via SQLAlchemy ORM), garantindo relacionamentos consistentes (Chaves Estrangeiras) e exclusão em cascata quando aplicável (ex: ao apagar um banco, apagar seus cartões).
+
+RNF04 - Padronização de Tipagem (CSV): O arquivo de extração para o Power BI deve seguir normas rigorosas de padronização: datas formatadas impreterivelmente como YYYY-MM-DD, valores financeiros utilizando ponto decimal em formato Float (1050.75), e texto em codificação UTF-8.
+
+RNF05 - Precisão Matemática: O sistema deve garantir a integridade dos cálculos financeiros utilizando a biblioteca Decimal do Python ou armazenamento de valores em centavos (Integer), evitando erros de arredondamento inerentes ao tipo de ponto flutuante (Float).
+
+RNF06 - Processamento e Ordenação no Servidor: A lógica de ordenação cronológica das faturas e a agregação de valores por tipo de conta (transacional vs. investimento) devem ser processadas no backend via consultas ao banco de dados, garantindo a performance da interface e a consistência dos dados entregues ao utilizador.
+
+RNF07 - Idempotência de Operações:
+O sistema deve garantir que requisições repetidas (intencionais ou não) não resultem na duplicação de transações ou inconsistências no estado dos dados.
+
+RNF08 - Preparação para Escalabilidade:
+A arquitetura deve ser projetada de forma a permitir futura migração para bancos de dados mais robustos (como PostgreSQL), sem necessidade de reestruturação significativa.
+
+

@@ -34,4 +34,11 @@ Fiquei o mês de janeiro inteiro sem fazer nada no projeto mas agora vou retomar
 
 **Dia 08/02/2026**
 
-Adicionei diversos recursos ao aplicativo, decidi que vou criar ele unicamente para uso pessoal, o dia que eu decidir colocar ele em domínio eu me viro para conseguir, estou tentando manter a rotina de constância nesse projeto e está sendo bem bacana, criei e resolvi problemas intensos kkk, apesar de ainda não estar escrevendo código diretamente, estou tentando entender bem as lógicas e por enquanto consigo fazer apenas ajustes pontuais no html, quem sabe no futuro eu aprenda a personalizar os 3 códigos, acho que vou constuir isso com o tempo mesmo.
+Adicionei diversos recursos ao aplicativo, decidi que vou criar ele unicamente para uso pessoal, o dia que eu decidir colocar ele em domínio eu me viro para conseguir, estou      tentando manter a rotina de constância nesse projeto e está sendo bem bacana, criei e resolvi problemas intensos kkk, apesar de ainda não estar escrevendo código diretamente, estou tentando entender bem as lógicas e por enquanto consigo fazer apenas ajustes pontuais no html, quem sabe no futuro eu aprenda a personalizar os 3 códigos, acho que vou constuir isso com o tempo mesmo.
+
+
+
+
+**Dia 12/04/2026**
+
+Hoje decidi escalar o projeto, quero usá-lo como portfólio de aprendizado em análise de dados, decidi remodular ele unicamente para o uso pessoal e extração de dados para exportar para o Power BI, permitindo criar interfaces interativas que vão ajudar a criar visões do que está sendo feito em relação aos gastos..será útil para eu aprender a usar a ferramenta de forma prática e real. Estou animado para começar isso.
